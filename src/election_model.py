@@ -33,13 +33,14 @@ class Election:
 
     def vote(self):
         # Deterministic voting
-        candidate_opis = np.array(candidate.x for candidate in self.residents[self.nom_msks])
+        candidates = self.residents[self.nom_msks]
+        candidate_opis = np.array([candidate.x for candidate in candidates])
         vote = []
         for resident in self.residents[~self.nom_msks]:
-            vote.append(np.argmin(candidate_opis - resident.x))
+            vote.append(np.argmin(np.abs(candidate_opis - resident.x)))
 
         vote_counter = Counter(vote)
-        self.elected.extend([candidate[0] for candidate in vote_counter.most_common(self.rep_num)])
+        self.elected.extend([candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)])
 
     def step(self):
         self.nominate()

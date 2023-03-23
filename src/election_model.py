@@ -37,13 +37,32 @@ class Election:
     def nominate(self):
         if (self.party_num != None) and (self.party_num > 0):
             tmp_opis = np.array([resident.x for resident in self.residents])
-            diff_square = np.square(np.subtract.outer(self.parties, tmp_opis))
+            diff = np.abs(np.subtract.outer(self.parties, tmp_opis))
+            diff_square = np.square(diff)
             gaussian_filter = np.exp((-diff_square)/(2*np.square(self.party_sd)))
-            party_nom = np.random.binomial(n=1, p=gaussian_filter).astype(bool)
+            party_nom = np.random.binomial(n=1, p=gaussian_filter).astype(bool) # party selection of residents
+            self_nom = np.random.binomial(n=1, p=self.nom_rate, size=self.N).astype(bool) # resident self-nomination
 
-            self_nom = np.random.choice([True, False], size=self.N, p=[self.nom_rate, 1-self.nom_rate])
+            party_msks = (party_nom & self_nom)
+
+            # assigning candidates w/ more than 1 parties to a specific party (not necessary yet)
+            multip_msks = party_msks.sum(axis=0) > 1
+            multip_ids = np.arange(self.N)[multip_msks]
+
+            party_ids = np.arange(self.party_num)
+
+            for i in range(multip_ids.shape[0]):
+                indv_diff = diff[party_msks[:,i],i]
+                party_probs = (indv_diff / np.sum(indv_diff))
+                party = np.random.choice(party_ids[party_msks[:,i]],
+                                         size = 1, p = party_probs)
+
+                party_msks[:,i] = False
+                party_msks[party,i] = True
+
+            self.nom_msks = np.any(party_msks, axis=0)
         else:
-            self.nom_msks = np.random.choice([True, False], size=self.N, p=[self.nom_rate, 1-self.nom_rate])
+            self.nom_msks = np.random.binomial(n=1, p=self.nom_rate, size=self.N).astype(bool)
 
     def vote(self, voting="deterministic"):
 
@@ -74,4 +93,4 @@ class Election:
         """
         Text representation of the model.
         """
-        return f'Population (size: {self.N})'
+        return f'Population (size: {self.N}|party: {self.party_num})'

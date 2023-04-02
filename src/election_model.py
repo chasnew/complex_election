@@ -68,19 +68,22 @@ class Election:
 
         candidates = self.residents[self.nom_msks]
         candidate_opis = np.array([candidate.x for candidate in candidates])
+        non_candidate_opis = np.array([resident.x for resident in self.residents[~self.nom_msks]])
         vote = []
 
         # Deterministic voting
+        # reimplementing with numpy operations
         if voting == "deterministic":
-            for resident in self.residents[~self.nom_msks]:
-                vote.append(np.argmin(np.abs(candidate_opis - resident.x)))
+            vote = np.argmin(np.abs(np.subtract.outer(non_candidate_opis, candidate_opis)), axis=1)
 
         # Probabilistic voting
         else:
-            for resident in self.residents[~self.nom_msks]:
-                opi_diffs = np.abs(candidate_opis - resident.x)
-                vote_probs = opi_diffs / np.sum(opi_diffs)
-                vote.append(np.random.choice(np.arange(len(candidates))), size=1, p=vote_probs)
+            opi_diffs = np.abs(np.subtract.outer(non_candidate_opis, candidate_opis))
+            elect_probs = opi_diffs / opi_diffs.sum(axis=1)[:,None]
+            elect_cumprobs = elect_probs.cumsum(axis=1)
+            tmp_randnums = np.random.uniform(0, 1, size=non_candidate_opis.shape[0])
+
+            vote = (elect_cumprobs < tmp_randnums[:,None]).sum(axis=1)
 
         vote_counter = Counter(vote)
         self.elected.extend([candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)])

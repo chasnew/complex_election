@@ -79,7 +79,7 @@ class Election:
         # Probabilistic voting
         else:
             opi_diffs = np.abs(np.subtract.outer(non_candidate_opis, candidate_opis))
-            elect_probs = opi_diffs / opi_diffs.sum(axis=1)[:,None]
+            elect_probs = 1 - (opi_diffs / opi_diffs.sum(axis=1)[:,None])
             elect_cumprobs = elect_probs.cumsum(axis=1)
             tmp_randnums = np.random.uniform(0, 1, size=non_candidate_opis.shape[0])
 

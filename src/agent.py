@@ -1,6 +1,6 @@
 class Agent:
     """
-    Represents a single person with an ID and lists of as/less/more knowledgeable persons.
+    Represents a single person with an ID and the person's opinon or policy position.
     """
 
     def __init__(self, id_: str, x):

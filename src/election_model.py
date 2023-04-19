@@ -34,7 +34,7 @@ class Election:
         # self.party_num = party_num
 
         if (party_num != None) and (party_num > 0):
-            party_pos = np.random.uniform(-1, 1, size=self.party_num)
+            party_pos = np.random.uniform(-1, 1, size=party_num)
             self.parties = [Party(i, party_pos[i], party_sd) for i in range(party_num)]
             self.party_sd = party_sd
         else:

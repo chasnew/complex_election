@@ -3,10 +3,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from election_model import Election
 
-N = 7500Å
+N = 5000
 nom_rate = 0.05
-rep_num = 5
-party_num = 0
+rep_num = 10
+party_num = 2
 district_num = 1
 voting = 'deterministic'
 print_interval = 500
@@ -23,6 +23,7 @@ for i in range(iterations):
 
 print('simulation is complete.')
 
+
 elected_opis = np.array([elected.x for elected in simple_election.elected_pool])
 resident_opis = []
 for i in range(district_num):
@@ -30,6 +31,7 @@ for i in range(district_num):
     resident_opis.extend([resident.x for resident in district.residents])
 
 resident_opis = np.array(resident_opis)
+
 
 # plt.style.use('seaborn-v0_8-colorblind')
 fig, ax = plt.subplots(figsize=(12,7))
@@ -43,4 +45,8 @@ ax.set_xlim(-1,1)
 # ax.set_ylim(0,0.05)
 ax.legend(['elected candidates', '_', 'residents'])
 plt.title('Distributions of representatives and residents opinions (N = {})'.format(N))
-plt.savefig('../results/reps{}_vs_res_basic2.png'.format(rep_num))
+
+if (party_num > 0):
+    plt.savefig('../results/reps{}_vs_res5k_party{}.png'.format(rep_num, party_num))
+else:
+    plt.savefig('../results/reps{}_vs_res5k_basic.png'.format(rep_num))

@@ -48,9 +48,13 @@ class District:
 
             party_ids = np.arange(len(parties))
 
-            for i in range(multip_ids.shape[0]):
+            for i in multip_ids:
                 indv_diff = diff[party_msks[:,i],i]
                 party_probs = (indv_diff / np.sum(indv_diff))
+
+                # print('party_probability = {}'.format(party_probs))
+                # print(party_msks[:,i])
+
                 party = np.random.choice(party_ids[party_msks[:,i]],
                                          size = 1, p = party_probs)
 

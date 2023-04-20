@@ -16,6 +16,8 @@ class Party:
         self.x = x
         self.sd = inclusiveness
 
+        self.members = None
+
     def __repr__(self):
         """
         Text representation of the agent.

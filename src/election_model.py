@@ -48,7 +48,7 @@ class Election:
 
         for district in self.districts:
             district.nominate(self.parties)
-            district.vote(voting=voting)
+            district.vote(voting=voting, parties=self.parties)
 
             self.elected_pool.extend(district.elected)
 

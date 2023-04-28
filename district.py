@@ -102,9 +102,10 @@ class District:
             vote = np.argmin(np.abs(np.subtract.outer(non_candidate_opis, party_opis)), axis=1)
 
             vote_counter = Counter(vote)
-            party_rep_nums = {id: np.round((vote_count/self.N)*self.rep_num) for (id, vote_count) in vote_counter}
+            # change `vote_counter` to `vote_counter.items()` ?
+            party_rep_nums = {id: int(np.round((vote_count/self.N)*self.rep_num)) for (id, vote_count) in vote_counter.items()}
 
-            for (id, elected_num) in party_rep_nums:
+            for (id, elected_num) in party_rep_nums.items():
                 candidate_opis = np.array([candidate.x for candidate in parties[id].members])
 
                 diff_square = np.square(np.abs(candidate_opis - parties[id].x))

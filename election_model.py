@@ -10,7 +10,7 @@ class Election:
 
     def __init__(self, N, nom_rate = 0.05, rep_num = 1,
                  party_num = None, party_sd = 0.2,
-                 district_num = 1,
+                 district_num = 1, voting='deterministic',
                  opinion_distribution = "uniform"):
         """
         Initializes the election model.
@@ -21,17 +21,13 @@ class Election:
         nom_rate: nomination rate (the rate at which residents become political candidates)
         rep_num: number of representatives
         """
+        self.voting = voting
 
         self.districts = []
         for i in range(district_num):
             district = District(N, nom_rate, rep_num,
                                 opinion_distribution)
             self.districts.append(district)
-
-        # self.N = N
-        # self.nom_rate = nom_rate
-        # self.rep_num = rep_num
-        # self.party_num = party_num
 
         if (party_num != None) and (party_num > 0):
             party_pos = np.random.uniform(-1, 1, size=party_num)
@@ -42,13 +38,13 @@ class Election:
 
         self.elected_pool = []
 
-    def step(self, voting="deterministic"):
+    def step(self):
 
         self.elected_pool = []
 
         for district in self.districts:
             district.nominate(self.parties)
-            district.vote(voting=voting, parties=self.parties)
+            district.vote(voting=self.voting, parties=self.parties)
 
             self.elected_pool.extend(district.elected)
 

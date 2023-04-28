@@ -7,7 +7,7 @@ N = 5000
 nom_rate = 0.05
 rep_num = 10
 party_num = 2
-district_num = 1
+district_num = 10
 voting = 'deterministic'
 print_interval = 500
 
@@ -32,7 +32,6 @@ for i in range(district_num):
 
 resident_opis = np.array(resident_opis)
 
-
 # plt.style.use('seaborn-v0_8-colorblind')
 fig, ax = plt.subplots(figsize=(12,7))
 
@@ -44,9 +43,18 @@ sns.histplot(resident_opis, stat='probability',
 ax.set_xlim(-1,1)
 # ax.set_ylim(0,0.05)
 ax.legend(['elected candidates', '_', 'residents'])
-plt.title('Distributions of representatives and residents opinions (N = {})'.format(N))
+plt.title('Distributions of representatives and residents opinions (d = {}, N = {})'.format(district_num, N))
 
-if (party_num > 0):
-    plt.savefig('../results/reps{}_vs_res5k_party{}.png'.format(rep_num, party_num))
+if (voting != 'prop_rep'):
+    if (party_num > 0):
+        if (district_num > 1):
+            plt.savefig('../results/reps{}_vs_res5k_party{}_d{}.png'.format(rep_num, party_num, district_num))
+        else:
+            plt.savefig('../results/reps{}_vs_res5k_party{}.png'.format(rep_num, party_num))
+    else:
+        if (district_num > 1):
+            plt.savefig('../results/reps{}_vs_res5k_d{}_basic.png'.format(rep_num, district_num))
+        else:
+            plt.savefig('../results/reps{}_vs_res5k_basic.png'.format(rep_num))
 else:
-    plt.savefig('../results/reps{}_vs_res5k_basic.png'.format(rep_num))
+    plt.savefig('../results/reps{}_vs_res5k_party{}_d{}_proprep.png'.format(rep_num, party_num, district_num))

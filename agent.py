@@ -21,7 +21,7 @@ class Resident:
         """
         Text representation of the agent.
         """
-        return f'Agent ({self.id}|{self.x})'
+        return f'Agent ({self.id}|{self.d_id}|{self.x})'
 
 
 
@@ -48,4 +48,4 @@ class Candidate(Resident):
         """
         Text representation of the agent.
         """
-        return f'Candidate ({self.id}|{self.x}|{self.party_id})'
+        return f'Candidate ({self.id}|{self.d_id}|{self.x}|{self.party_id})'

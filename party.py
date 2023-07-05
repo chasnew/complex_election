@@ -16,7 +16,7 @@ class Party:
         self.x = x
         self.sd = inclusiveness
 
-        self.members = None
+        self.members = []
 
     def __repr__(self):
         """

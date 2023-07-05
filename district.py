@@ -31,7 +31,6 @@ class District:
             init_opis = np.random.uniform(-1, 1, size=N)
         elif opinion_distribution == "gaussian":
             lower, upper = -1, 1
-            gaussian_mu, gaussian_sd = 0, 0.5
             a = (lower - gaussian_mu) / gaussian_sd  # lower sd cutoff
             b = (upper - gaussian_mu) / gaussian_sd  # upper sd cutoff
             init_opis = stats.truncnorm(a, b, loc=gaussian_mu, scale=gaussian_sd).rvs(N)
@@ -45,6 +44,7 @@ class District:
         self.elected = []
         self.elected_party = []
 
+
     def nominate(self, parties=[]):
         if (len(parties) > 0):
             party_opis = [party.x for party in parties]
@@ -54,17 +54,27 @@ class District:
             diff = np.abs(np.subtract.outer(party_opis, tmp_opis))
 
             # pre-select residents to be core members of the party ensuring that parties have at least one candidate
-            # party_opis = [-0.3, 0.1, 0.8]
-            # test_opis = np.random.uniform(-1, 1, size=10)
-            # test_diff = np.abs(np.subtract.outer(party_opis, test_opis))
-            # np.argmin
+            top_candidates = np.argpartition(diff, len(parties))[:,:len(parties)]
+            core_list = []
 
+            for i in range(len(parties)):
+                for j in range(len(top_candidates)):
+                    if top_candidates[i,j] not in core_list:
+                        core_list.append(top_candidates[i,j])
+                        break
+
+            # gaussian filter of party selection
             diff_square = np.square(diff)
             gaussian_filter = np.exp((-diff_square)/(2*np.square(party_sd)))
             party_nom = np.random.binomial(n=1, p=gaussian_filter).astype(bool) # party selection of residents
             self_nom = np.random.binomial(n=1, p=self.nom_rate, size=self.N).astype(bool) # resident self-nomination
 
             party_msks = (party_nom & self_nom)
+
+            # setting mask for core members of the parties
+            for i in range(len(parties)):
+                party_msks[:,core_list[i]] = False
+                party_msks[i,core_list[i]] = True
 
             # assigning candidates w/ more than 1 parties to a specific party
             multip_msks = party_msks.sum(axis=0) > 1
@@ -95,6 +105,7 @@ class District:
                 party.members.extend(district_candidates)
         else:
             self.nom_msks = np.random.binomial(n=1, p=self.nom_rate, size=self.N).astype(bool)
+
 
     def vote(self, voting="deterministic", parties=[], party_filter=False):
 
@@ -134,7 +145,7 @@ class District:
 
                 # local party candidates in the district
                 pd_candidates = np.array([candidate for candidate in parties[pid].members
-                                                 if candidate.d_id == d_id])
+                                                 if candidate.d_id == self.d_id])
                 if party_filter:
                     party_candidate_opis = np.array([candidate.x for candidate in pd_candidates])
 
@@ -176,7 +187,7 @@ class District:
             for (pid, elected_num) in party_rep_nums.items():
 
                 # party candidates who haven't been elected yet
-                p_candidates = np.array([candidate for candidate in parties[pid].member
+                p_candidates = np.array([candidate for candidate in parties[pid].members
                                          if candidate.elected == False])
 
                 if party_filter:
@@ -188,7 +199,7 @@ class District:
                 else:
                     elect_probs = np.ones(len(p_candidates)) / len(p_candidates)
 
-                elect_ids = np.random.choice(np.arange(p_candidates), p=elect_probs, size=elected_num)
+                elect_ids = np.random.choice(np.arange(len(p_candidates)), p=elect_probs, size=elected_num)
 
                 # mark candidate as being elected
                 for elected_c in p_candidates[elect_ids]:

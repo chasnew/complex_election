@@ -1,5 +1,6 @@
-from agent import Agent
+from agent import Resident, Candidate
 import numpy as np
+import scipy.stats as stats
 from collections import Counter
 
 class District:
@@ -7,21 +8,35 @@ class District:
     An object representing a district that holds an election
     """
 
-    def __init__(self, N, nom_rate = 0.05, rep_num = 1,
-                 opinion_distribution = "uniform"):
+    def __init__(self, d_id, N, nom_rate = 0.05, rep_num = 1,
+                 opinion_distribution = "uniform",
+                 gaussian_mu = 0, gaussian_sd = 0.5):
         """
         Initializes the election model.
 
         Parameters
         ----------
+        d_id: district id
         N : number of residents (agents)
         nom_rate: nomination rate (the rate at which residents become political candidates)
         rep_num: number of representatives
         opinion_distribution: distribution of opinions of the district residents
+        gaussian_mu: mean of the gaussian distribution of opinions
+        gaussian_sd: standard deviation of the gaussian distribution of opinions
         """
 
-        init_opis = np.random.uniform(-1, 1, size=N)
-        self.residents = np.array([Agent(i, init_opis[i]) for i in range(N)])
+        self.d_id = d_id
+
+        if opinion_distribution == "uniform":
+            init_opis = np.random.uniform(-1, 1, size=N)
+        elif opinion_distribution == "gaussian":
+            lower, upper = -1, 1
+            gaussian_mu, gaussian_sd = 0, 0.5
+            a = (lower - gaussian_mu) / gaussian_sd  # lower sd cutoff
+            b = (upper - gaussian_mu) / gaussian_sd  # upper sd cutoff
+            init_opis = stats.truncnorm(a, b, loc=gaussian_mu, scale=gaussian_sd).rvs(N)
+
+        self.residents = np.array([Resident(i, self.d_id, init_opis[i]) for i in range(N)])
         self.N = N
         self.nom_rate = nom_rate
         self.rep_num = rep_num
@@ -37,6 +52,13 @@ class District:
 
             tmp_opis = np.array([resident.x for resident in self.residents])
             diff = np.abs(np.subtract.outer(party_opis, tmp_opis))
+
+            # pre-select residents to be core members of the party ensuring that parties have at least one candidate
+            # party_opis = [-0.3, 0.1, 0.8]
+            # test_opis = np.random.uniform(-1, 1, size=10)
+            # test_diff = np.abs(np.subtract.outer(party_opis, test_opis))
+            # np.argmin
+
             diff_square = np.square(diff)
             gaussian_filter = np.exp((-diff_square)/(2*np.square(party_sd)))
             party_nom = np.random.binomial(n=1, p=gaussian_filter).astype(bool) # party selection of residents
@@ -66,8 +88,11 @@ class District:
 
             self.nom_msks = np.any(party_msks, axis=0)
 
+            # party member list is extended with local candidates
             for party in parties:
-                party.members = self.residents[party_msks[party.id,:]]
+                district_candidates = [Candidate(resident.id, self.d_id, resident.x, party.id)
+                                       for resident in self.residents[party_msks[party.id,:]]]
+                party.members.extend(district_candidates)
         else:
             self.nom_msks = np.random.binomial(n=1, p=self.nom_rate, size=self.N).astype(bool)
 
@@ -75,22 +100,23 @@ class District:
 
         candidates = self.residents[self.nom_msks]
         candidate_opis = np.array([candidate.x for candidate in candidates])
-        non_candidate_opis = np.array([resident.x for resident in self.residents[~self.nom_msks]])
-        vote = []
+
+        # every resident votes
+        resident_opis = np.array([resident.x for resident in self.residents])
 
         # Deterministic voting
         if voting == "deterministic":
-            vote = np.argmin(np.abs(np.subtract.outer(non_candidate_opis, candidate_opis)), axis=1)
+            vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
 
             vote_counter = Counter(vote)
             self.elected.extend([candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)])
 
         # Probabilistic voting
         elif voting == "probabilistic":
-            opi_diffs = np.abs(np.subtract.outer(non_candidate_opis, candidate_opis))
+            opi_diffs = np.abs(np.subtract.outer(resident_opis, candidate_opis))
             elect_probs = 1 - (opi_diffs / opi_diffs.sum(axis=1)[:,None])
             elect_cumprobs = elect_probs.cumsum(axis=1)
-            tmp_randnums = np.random.uniform(0, 1, size=non_candidate_opis.shape[0])
+            tmp_randnums = np.random.uniform(0, 1, size=resident_opis.shape[0])
 
             vote = (elect_cumprobs < tmp_randnums[:,None]).sum(axis=1)
 
@@ -99,57 +125,74 @@ class District:
 
         # Single candidate per party (First-past-the-post)
         elif voting == "one_per_party":
-            candidates = np.full(len(parties), 0)
-            candidate_opis = np.full(len(parties), 0)
+            candidates = [0] * len(parties)
+            candidate_opis = np.full(len(parties), 0).astype(np.float64)
 
             # Parties nominate one candidate to enter the race
-            for i in len(parties):
-                id = parties[i].id
+            for i in range(len(parties)):
+                pid = parties[i].id
 
+                # local party candidates in the district
+                pd_candidates = np.array([candidate for candidate in parties[pid].members
+                                                 if candidate.d_id == d_id])
                 if party_filter:
-                    party_candidate_opis = np.array([candidate.x for candidate in parties[id].members])
+                    party_candidate_opis = np.array([candidate.x for candidate in pd_candidates])
 
-                    diff_square = np.square(np.abs(party_candidate_opis - parties[id].x))
-                    gaussian_filter = np.exp((-diff_square) / (2 * np.square(parties[id].sd)))
+                    diff_square = np.square(np.abs(party_candidate_opis - parties[pid].x))
+                    gaussian_filter = np.exp((-diff_square) / (2 * np.square(parties[pid].sd)))
                     party_nom_probs = gaussian_filter / np.sum(gaussian_filter)
                 else:
-                    party_nom_probs = np.ones(len(parties[id].members)) / len(parties[id].members)
+                    party_nom_probs = np.ones(len(pd_candidates)) / len(pd_candidates)
 
-                candidates[id] = np.random.choice(parties[id].members, p=party_nom_probs, size=1)
-                candidate_opis[id] = candidates[id].x
+                candidates[pid] = np.random.choice(pd_candidates, p=party_nom_probs, size=1)[0]
+                candidate_opis[pid] = candidates[pid].x
 
-            # party members / politicians do not vote
+            candidates = np.array(candidates)
+
             # residents vote for the closest candidate
-            vote = np.argmin(np.abs(np.subtract.outer(non_candidate_opis, candidate_opis)), axis=1)
+            vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
 
             vote_counter = Counter(vote)
-            self.elected.extend([candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)])
-            self.elected_party.extend([id for (id, vote_count) in vote_counter.most_common(self.rep_num)])
+            winner_id = vote_counter.most_common(1)[0][0]
+
+            # mark winning candidate as being elected
+            candidates[winner_id].elected = True
+
+            self.elected.append(candidates[winner_id])
+            self.elected_party.append(winner_id)
 
         # Proportional representation (closed list)
         else:
             party_opis = [party.x for party in parties]
 
             # residents vote for the closest party
-            vote = np.argmin(np.abs(np.subtract.outer(non_candidate_opis, party_opis)), axis=1)
+            vote = np.argmin(np.abs(np.subtract.outer(resident_opis, party_opis)), axis=1)
 
             vote_counter = Counter(vote)
             party_rep_nums = {id: int(np.round((vote_count/self.N)*self.rep_num))
                               for (id, vote_count) in vote_counter.items()}
 
-            # Parties select their candidates to occupy the seats
-            for (id, elected_num) in party_rep_nums.items():
+            # Parties select their candidates from their party pool to occupy the seats
+            for (pid, elected_num) in party_rep_nums.items():
+
+                # party candidates who haven't been elected yet
+                p_candidates = np.array([candidate for candidate in parties[pid].member
+                                         if candidate.elected == False])
 
                 if party_filter:
-                    candidate_opis = np.array([candidate.x for candidate in parties[id].members])
+                    candidate_opis = np.array([candidate.x for candidate in p_candidates])
 
-                    diff_square = np.square(np.abs(candidate_opis - parties[id].x))
-                    gaussian_filter = np.exp((-diff_square) / (2 * np.square(parties[id].sd)))
+                    diff_square = np.square(np.abs(candidate_opis - parties[pid].x))
+                    gaussian_filter = np.exp((-diff_square) / (2 * np.square(parties[pid].sd)))
                     elect_probs = gaussian_filter / np.sum(gaussian_filter)
                 else:
-                    elect_probs = np.ones(len(parties[id].members)) / len(parties[id].members)
+                    elect_probs = np.ones(len(p_candidates)) / len(p_candidates)
 
-                elect_ids = np.random.choice(np.arange(candidate_opis.shape[0]), p=elect_probs, size=elected_num)
+                elect_ids = np.random.choice(np.arange(p_candidates), p=elect_probs, size=elected_num)
 
-                self.elected.extend(list(parties[id].members[elect_ids]))
-                self.elected_party.extend([id] * elected_num)
+                # mark candidate as being elected
+                for elected_c in p_candidates[elect_ids]:
+                    elected_c.elected = True
+
+                self.elected.extend(list(p_candidates[elect_ids]))
+                self.elected_party.extend([pid] * elected_num)

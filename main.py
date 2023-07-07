@@ -3,16 +3,19 @@ import os
 import pandas as pd
 import itertools
 import multiprocessing as mp
+import yaml
 from election_model import Election
 
-fixed_params = {'N': 10000,
-                'nom_rate': 0.05,
-                'opinion_distribution': 'uniform'}
+with open('election_config.yaml') as file:
+    config_params = yaml.safe_load(file)
 
-n_sim = 4
-n_iter = 100
-print_interval = 50
-process_num = 4
+fixed_params = config_params['fixed_params']
+
+result_path = config_params['result_path']
+n_sim = config_params['n_sim']
+n_iter = config_params['iter_num']
+print_interval = config_params['print_interval']
+process_num = 4 #int(sys.argv[1])
 max_js_distance = 0.8325546111576977
 
 def simulate_election(params, model_keys, n_iter = 5000, print_interval = None):
@@ -31,24 +34,6 @@ def simulate_election(params, model_keys, n_iter = 5000, print_interval = None):
     return datacollector
 
 
-## There are issues with multicore processing
-## [Errno 2] No such file or directory: '/Users/chanuwasaswamenakul/Documents/workspace/complex_election/<input>'
-'''
-RuntimeError: 
-        An attempt has been made to start a new process before the
-        current process has finished its bootstrapping phase.
-
-        This probably means that you are not using fork to start your
-        child processes and you have forgotten to use the proper idiom
-        in the main module:
-
-            if __name__ == '__main__':
-                freeze_support()
-                ...
-
-        The "freeze_support()" line can be omitted if the program
-        is not going to be frozen to produce an executable.
-'''
 if __name__ == '__main__':
 
     model_keys = ['party_num', 'district_num', 'rep_num', 'voting', 'distribution', 'js_distance']
@@ -175,8 +160,8 @@ if __name__ == '__main__':
 
     result_df = pd.DataFrame(results)
     print(result_df.info())
-    print(result_df.head())
+    # print(result_df.head())
 
     # save data
-    result_file = os.path.join('results', 'polit_rep_results.csv')
+    result_file = os.path.join(result_path, 'election_results.csv')
     result_df.to_csv(result_file, index=False)

@@ -1,29 +1,35 @@
 import numpy as np
-from scipy.spatial import distance
-import matplotlib.pyplot as plt
-import seaborn as sns
+import os
+import pandas as pd
+import itertools
 import multiprocessing as mp
 from election_model import Election
 
-import sys
-sys.path.extend(['/Users/chanuwasaswamenakul/Documents/workspace/complex_election/src'])
+fixed_params = {'N': 10000,
+                'nom_rate': 0.05,
+                'opinion_distribution': 'uniform'}
 
-params = {'N': 10000,
-          'nom_rate': 0.05,
-          'rep_num': 10,
-          'party_num': 1,
-          'district_num': 1,
-          'voting': 'deterministic',
-          'opinion_distribution': 'uniform'}
+n_sim = 4
+n_iter = 100
+print_interval = 50
+process_num = 4
+max_js_distance = 0.8325546111576977
 
-n_sim = 5
-iterations = 5000
-print_interval = 1000
-process_num = 2
+def simulate_election(params, model_keys, n_iter = 5000, print_interval = None):
+    np.random.seed()
 
-# initiate multicore-processing pool
-if process_num == -1:
-    process_num = mp.cpu_count()
+    election_model = Election(**params)
+
+    for i in range(n_iter):
+        if print_interval != None and (i % print_interval == 0):
+            print('iteration: {}'.format(i))
+        election_model.step()
+
+    # collecting model results
+    datacollector = election_model.report_model(model_keys)
+
+    return datacollector
+
 
 ## There are issues with multicore processing
 ## [Errno 2] No such file or directory: '/Users/chanuwasaswamenakul/Documents/workspace/complex_election/<input>'
@@ -43,53 +49,134 @@ RuntimeError:
         The "freeze_support()" line can be omitted if the program
         is not going to be frozen to produce an executable.
 '''
-if process_num > 1:
-    pool = mp.Pool(processes=process_num)
+if __name__ == '__main__':
 
-def simulate_election(params, n_iter = 5000, print_interval = None):
+    model_keys = ['party_num', 'district_num', 'rep_num', 'voting', 'distribution', 'js_distance']
 
-    election_model = Election(**params)
+    # initiate multicore-processing pool
+    if process_num == -1:
+        process_num = mp.cpu_count()
 
-    for i in range(n_iter):
-        if print_interval != None and (i % print_interval == 0):
-            print('iteration: {}'.format(i))
-        election_model.step()
+    if process_num > 1:
+        pool = mp.Pool(processes=process_num)
 
-    elected_opis = np.array([elected.x for elected in election_model.elected_pool])
-    resident_opis = []
-
-    for i in range(params['district_num']):
-        district = election_model.districts[i]
-        resident_opis.extend([resident.x for resident in district.residents])
-
-    resident_opis = np.array(resident_opis)
-
-    res_hists = np.histogram(resident_opis, bins=100, range=(-1, 1))[0]
-    res_hists = res_hists / res_hists.sum()
-    elect_hists = np.histogram(elected_opis, bins=100, range=(-1, 1))[0]
-    elect_hists = elect_hists / elect_hists.sum()
-
-    return distance.jensenshannon(res_hists, elect_hists)
-
-run_data = []
-def log_result(result):
-    # a callback function for simulate_opf
-    run_data.append(result)
-
-if process_num == 1:
-    for i in range(n_sim):
-        js_dist = simulate_election(params, iterations, print_interval)
-        run_data.append(js_dist)
-else:
-    for i in range(n_sim):
-        # alternative to callback is using get()
-        pool.apply_async(simulate_election,
-                         args=(params, iterations, print_interval,),
-                         callback=log_result)
-
-    pool.close()
-    pool.join()
+    results = []
 
 
-print('simulation is complete.')
+    # Baseline scenario
+    variable_params = {'rep_num': [1, 10],
+                       'party_num': [0, 1],
+                       'district_num': [1],
+                       'voting': ['deterministic']}
 
+    combo_vparams = [dict(zip(variable_params.keys(), a))
+                     for a in itertools.product(*variable_params.values())]
+
+    for i in range(len(combo_vparams)):
+
+        # pre-processing parameters
+        params = fixed_params.copy()
+        params.update(combo_vparams[i])
+        print('variable parameters: ', combo_vparams[i])
+
+        if process_num == 1:
+            for j in range(n_sim):
+                print('simulation: {}'.format(j))
+                sim_result = simulate_election(params, model_keys,
+                                               n_iter, print_interval)
+                results.append(sim_result)
+        else:
+            print('simulations with {} processes'.format(process_num))
+
+            tmp_results = list(pool.apply_async(simulate_election,
+                                            args=(params, model_keys,
+                                                  n_iter, print_interval,))
+                           for j in range(n_sim))
+            tmp_results = [r.get() for r in tmp_results]
+            results.extend(tmp_results)
+
+
+
+    # First-past-the-post
+    variable_params = {'rep_num': [1],
+                       'party_num': [2],
+                       'district_num': [10],
+                       'voting': ['one_per_party']}
+
+    combo_vparams = [dict(zip(variable_params.keys(), a))
+                     for a in itertools.product(*variable_params.values())]
+
+    for i in range(len(combo_vparams)):
+
+        # pre-processing parameters
+        params = fixed_params.copy()
+        params.update(combo_vparams[i])
+        print('variable parameters: ', combo_vparams[i])
+
+        if process_num == 1:
+            for j in range(n_sim):
+                print('simulation: {}'.format(j))
+                sim_result = simulate_election(params, model_keys,
+                                               n_iter, print_interval)
+                results.append(sim_result)
+        else:
+            print('simulations with {} processes'.format(process_num))
+
+            tmp_results = list(pool.apply_async(simulate_election,
+                                                args=(params, model_keys,
+                                                      n_iter, print_interval,))
+                               for j in range(n_sim))
+            tmp_results = [r.get() for r in tmp_results]
+            results.extend(tmp_results)
+
+
+
+    # Proportional representation
+    variable_params = {'rep_num': [10],
+                       'party_num': [2],
+                       'district_num': [1],
+                       'voting': ['proportional_rep']}
+
+    combo_vparams = [dict(zip(variable_params.keys(), a))
+                     for a in itertools.product(*variable_params.values())]
+    combo_vparams.extend([{'rep_num': 20, 'party_num': party_num,
+                           'district_num': 5, 'voting': 'proportional_rep'}
+                          for party_num in [2]])
+
+    for i in range(len(combo_vparams)):
+
+        # pre-processing parameters
+        params = fixed_params.copy()
+        params.update(combo_vparams[i])
+        print('variable parameters: ', combo_vparams[i])
+
+        if process_num == 1:
+            for j in range(n_sim):
+                print('simulation: {}'.format(j))
+                sim_result = simulate_election(params, model_keys,
+                                               n_iter, print_interval)
+                results.append(sim_result)
+        else:
+            print('simulations with {} processes'.format(process_num))
+
+            tmp_results = list(pool.apply_async(simulate_election,
+                                                args=(params, model_keys,
+                                                      n_iter, print_interval,))
+                               for j in range(n_sim))
+            tmp_results = [r.get() for r in tmp_results]
+            results.extend(tmp_results)
+
+
+    if process_num > 1:
+        pool.close()
+        pool.join()
+
+    print('simulation is complete.')
+
+    result_df = pd.DataFrame(results)
+    print(result_df.info())
+    print(result_df.head())
+
+    # save data
+    result_file = os.path.join('results', 'polit_rep_results.csv')
+    result_df.to_csv(result_file, index=False)

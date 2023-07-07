@@ -30,6 +30,7 @@ class Election:
         gaussian_sd: standard deviation of the gaussian distribution of opinions
         """
         self.voting = voting
+        self.opinion_distribution = opinion_distribution
 
         self.districts = []
         Nd = int(np.round(N / district_num)) # number of residents per district
@@ -51,6 +52,7 @@ class Election:
                                'district_num': lambda m: len(m.districts),
                                'rep_num': lambda m: m.districts[0].rep_num,
                                'voting': lambda m: m.voting,
+                               'distribution': lambda m: m.opinion_distribution,
                                'js_distance': lambda m: m.position_dissimilarity()}
 
         self.elected_pool = []

@@ -5,6 +5,7 @@ import itertools
 import multiprocessing as mp
 import yaml
 from election_model import Election
+import sys
 
 with open('election_config.yaml') as file:
     config_params = yaml.safe_load(file)
@@ -15,7 +16,7 @@ result_path = config_params['result_path']
 n_sim = config_params['n_sim']
 n_iter = config_params['iter_num']
 print_interval = config_params['print_interval']
-process_num = 4 #int(sys.argv[1])
+process_num = 2 #int(sys.argv[1])
 max_js_distance = 0.8325546111576977
 
 def simulate_election(params, model_keys, n_iter = 5000, print_interval = None):

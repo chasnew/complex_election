@@ -43,6 +43,8 @@ class District:
         self.nom_msks = []
         self.elected = []
         self.elected_party = []
+        self.cum_elected = []
+        self.cum_elected_party = []
 
 
     def nominate(self, parties=[]):
@@ -120,7 +122,8 @@ class District:
             vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
 
             vote_counter = Counter(vote)
-            self.elected.extend([candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)])
+            self.elected = [candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)]
+            self.cum_elected.extend(self.elected)
 
         # Probabilistic voting
         elif voting == "probabilistic":
@@ -132,7 +135,8 @@ class District:
             vote = (elect_cumprobs < tmp_randnums[:,None]).sum(axis=1)
 
             vote_counter = Counter(vote)
-            self.elected.extend([candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)])
+            self.elected = [candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)]
+            self.cum_elected.extend(self.elected)
 
         # Single candidate per party (First-past-the-post)
         elif voting == "one_per_party":
@@ -169,8 +173,11 @@ class District:
             # mark winning candidate as being elected
             candidates[winner_id].elected = True
 
-            self.elected.append(candidates[winner_id])
-            self.elected_party.append(winner_id)
+            self.elected = candidates[winner_id]
+            self.cum_elected.append(self.elected)
+
+            self.elected_party = winner_id
+            self.cum_elected_party.append(self.elected_party)
 
         # Proportional representation (closed list)
         else:
@@ -205,5 +212,29 @@ class District:
                 for elected_c in p_candidates[elect_ids]:
                     elected_c.elected = True
 
-                self.elected.extend(list(p_candidates[elect_ids]))
-                self.elected_party.extend([pid] * elected_num)
+                self.elected = list(p_candidates[elect_ids])
+                self.cum_elected.extend(self.elected)
+
+                self.elected_party = [pid] * elected_num
+                self.cum_elected_party.extend(self.elected_party)
+
+    def appraise(self, elected_pool):
+
+        # Average position of the representatives
+        elected_position = np.mean([elected.x for elected in elected_pool])
+
+        resident_opis = np.array([resident.x for resident in self.residents])
+        opi_diffs = np.abs(resident_opis - elected_position)
+
+        # k = steepness of logit
+        # re_loc is re-centering the logit function
+        k = -5
+        re_loc = 1
+        logit = 1 / (1 + np.exp(-k*(opi_diffs - re_loc)))
+        trust_update = 0.5 - logit # flip logit horizontally and readjust min, max (-0.5, 0.5)
+
+        for resident in self.residents:
+            resident.trust = resident.trust + trust_update
+
+        # what if no agents vote?
+

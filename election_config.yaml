@@ -1,8 +1,9 @@
 result_path: 'results'
-n_sim: 10
-iter_num: 10000
+n_sim: 2
+iter_num: 2500
 print_interval: 2000
+scenario: 'proportional_rep'
 fixed_params:
-  N: 50000
+  N: 10000
   nom_rate: 0.05
   opinion_distribution: 'uniform'

@@ -14,7 +14,7 @@ def simulate_election(params, model_keys, n_iter = 5000, print_interval = None):
 
     for i in range(n_iter):
         if print_interval != None and (i % print_interval == 0):
-            print('iteration: {}'.format(i))
+            print('iteration: {}'.format(i), flush=True)
         election_model.step()
 
     # collecting model results
@@ -32,7 +32,7 @@ def iterate_seq(combo_vparams, model_keys, n_sim=10, n_iter=1000, print_interval
         # pre-processing parameters
         params = fixed_params.copy()
         params.update(combo_vparams[i])
-        print('variable parameters: ', combo_vparams[i])
+        print('variable parameters: ', combo_vparams[i], flush=True)
 
         for j in range(n_sim):
             print('simulation: {}'.format(j))
@@ -53,7 +53,7 @@ def iterate_parallel(combo_vparams, model_keys, pool, process_num,
         # pre-processing parameters
         params = fixed_params.copy()
         params.update(combo_vparams[i])
-        print('variable parameters: ', combo_vparams[i])
+        print('variable parameters: ', combo_vparams[i], flush=True)
 
         print('simulations with {} processes'.format(process_num))
 
@@ -79,6 +79,7 @@ if __name__ == '__main__':
     n_sim = config_params['n_sim']
     n_iter = config_params['iter_num']
     print_interval = config_params['print_interval']
+    elect_system = config_params['scenario']
     process_num = 2  # int(os.getenv('SLURM_CPUS_ON_NODE'))
     max_js_distance = 0.8325546111576977
 
@@ -93,52 +94,55 @@ if __name__ == '__main__':
 
         results = []
 
-        # Baseline scenario
-        variable_params = {'rep_num': [1],
-                           'party_num': [0],
-                           'district_num': [1],
-                           'voting': ['deterministic']}
+        if elect_system == 'deterministic':
+            # Baseline scenario
+            variable_params = {'rep_num': [1],
+                               'party_num': [0],
+                               'district_num': [1],
+                               'voting': ['deterministic']}
 
-        combo_vparams = [dict(zip(variable_params.keys(), a))
-                         for a in itertools.product(*variable_params.values())]
+            combo_vparams = [dict(zip(variable_params.keys(), a))
+                             for a in itertools.product(*variable_params.values())]
 
-        tmp_results = iterate_parallel(combo_vparams, model_keys, p, process_num,
-                                       n_sim, n_iter, print_interval)
-        results.extend(tmp_results)
-
-
-
-        # First-past-the-post
-        variable_params = {'rep_num': [1],
-                           'party_num': [2],
-                           'district_num': [10],
-                           'voting': ['one_per_party']}
-
-        combo_vparams = [dict(zip(variable_params.keys(), a))
-                         for a in itertools.product(*variable_params.values())]
-
-        tmp_results = iterate_parallel(combo_vparams, model_keys, p, process_num,
-                                       n_sim, n_iter, print_interval)
-        results.extend(tmp_results)
+            tmp_results = iterate_parallel(combo_vparams, model_keys, p, process_num,
+                                           n_sim, n_iter, print_interval)
+            results.extend(tmp_results)
 
 
+        elif elect_system == 'one_per_party':
+            # First-past-the-post
+            variable_params = {'rep_num': [1],
+                               'party_num': [2],
+                               'district_num': [10],
+                               'voting': ['one_per_party']}
 
-        # Proportional representation
-        variable_params = {'rep_num': [10],
-                           'party_num': [2],
-                           'district_num': [1],
-                           'voting': ['proportional_rep']}
+            combo_vparams = [dict(zip(variable_params.keys(), a))
+                             for a in itertools.product(*variable_params.values())]
 
-        combo_vparams = [dict(zip(variable_params.keys(), a))
-                         for a in itertools.product(*variable_params.values())]
-        combo_vparams.extend([{'rep_num': 20, 'party_num': party_num,
-                               'district_num': 5, 'voting': 'proportional_rep'}
-                              for party_num in [2]])
+            tmp_results = iterate_parallel(combo_vparams, model_keys, p, process_num,
+                                           n_sim, n_iter, print_interval)
+            results.extend(tmp_results)
 
-        tmp_results = iterate_parallel(combo_vparams, model_keys, p, process_num,
-                                       n_sim, n_iter, print_interval)
-        results.extend(tmp_results)
 
+        elif elect_system == 'proportional_rep':
+            # Proportional representation
+            variable_params = {'rep_num': [10],
+                               'party_num': [2],
+                               'district_num': [1],
+                               'voting': ['proportional_rep']}
+
+            combo_vparams = [dict(zip(variable_params.keys(), a))
+                             for a in itertools.product(*variable_params.values())]
+            combo_vparams.extend([{'rep_num': 20, 'party_num': party_num,
+                                   'district_num': 5, 'voting': 'proportional_rep'}
+                                  for party_num in [2]])
+
+            tmp_results = iterate_parallel(combo_vparams, model_keys, p, process_num,
+                                           n_sim, n_iter, print_interval)
+            results.extend(tmp_results)
+
+        p.close()
+        p.join()
 
     print('simulation is complete.')
 
@@ -147,5 +151,5 @@ if __name__ == '__main__':
     print(result_df.head())
 
     # save data
-    result_file = os.path.join(result_path, 'election_results.csv')
+    result_file = os.path.join(result_path, 'elect_{}_results.csv'.format(elect_system))
     result_df.to_csv(result_file, index=False)

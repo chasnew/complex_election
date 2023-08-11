@@ -3,7 +3,7 @@ class Resident:
     Represents a resident with an ID and the person's opinion or policy position.
     """
 
-    def __init__(self, id_, d_id, x):
+    def __init__(self, id_, d_id, x, trust=1):
         """
         Initializes the agent.
 
@@ -12,10 +12,12 @@ class Resident:
         id_: The ID of the agent.
         d_id: district ID of the agent
         x: opinion value or policy preference of the agent
+        trust: electoral trust that affects political participation
         """
         self.id = id_
         self.d_id = d_id
         self.x = x
+        self.trust = trust
 
     def __repr__(self):
         """

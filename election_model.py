@@ -55,8 +55,12 @@ class Election:
                                'distribution': lambda m: m.opinion_distribution,
                                'js_distance': lambda m: m.position_dissimilarity()}
 
+
         self.elected_pool = []
         self.elected_party_pool = []
+
+        self.cum_elected_pool = []
+        self.cum_elected_party_pool = []
 
     def position_dissimilarity(self):
         '''
@@ -64,7 +68,7 @@ class Election:
         :return: Distributional distance
         '''
 
-        elected_opis = np.array([elected.x for elected in self.elected_pool])
+        elected_opis = np.array([elected.x for elected in self.cum_elected_pool])
         resident_opis = []
 
         for i in range(len(self.districts)):
@@ -82,6 +86,7 @@ class Election:
 
     def step(self):
 
+        # reset candidate pools for the new election cycle
         self.elected_pool = []
         self.elected_party_pool = []
 
@@ -91,6 +96,10 @@ class Election:
 
             self.elected_pool.extend(district.elected)
             self.elected_party_pool.extend(district.elected_party)
+
+        # cumulative elected representative pool
+        self.cum_elected_pool.extend(self.elected_pool)
+        self.cum_elected_party_pool(self.elected_party_pool)
 
         # reset candidates after an election
         for party in self.parties:

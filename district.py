@@ -109,7 +109,8 @@ class District:
             self.nom_msks = np.random.binomial(n=1, p=self.nom_rate, size=self.N).astype(bool)
 
 
-    def vote(self, voting="deterministic", parties=[], party_filter=False):
+    def vote(self, voting="deterministic", parties=[],
+             trust_based=False, party_filter=False):
 
         candidates = self.residents[self.nom_msks]
         candidate_opis = np.array([candidate.x for candidate in candidates])
@@ -117,9 +118,16 @@ class District:
         # every resident votes
         resident_opis = np.array([resident.x for resident in self.residents])
 
+        if trust_based:
+            et = np.array([resident.trust for resident in self.residents])
+            is_vote = np.random.binomial(n=1, p=et, size=self.N).astype(bool)
+
         # Deterministic voting
         if voting == "deterministic":
             vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
+
+            if trust_based:
+                vote = vote[is_vote]
 
             vote_counter = Counter(vote)
             self.elected = [candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)]
@@ -133,6 +141,9 @@ class District:
             tmp_randnums = np.random.uniform(0, 1, size=resident_opis.shape[0])
 
             vote = (elect_cumprobs < tmp_randnums[:,None]).sum(axis=1)
+
+            if trust_based:
+                vote = vote[is_vote]
 
             vote_counter = Counter(vote)
             self.elected = [candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)]
@@ -167,6 +178,9 @@ class District:
             # residents vote for the closest candidate
             vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
 
+            if trust_based:
+                vote = vote[is_vote]
+
             vote_counter = Counter(vote)
             winner_id = vote_counter.most_common(1)[0][0]
 
@@ -185,6 +199,9 @@ class District:
 
             # residents vote for the closest party
             vote = np.argmin(np.abs(np.subtract.outer(resident_opis, party_opis)), axis=1)
+
+            if trust_based:
+                vote = vote[is_vote]
 
             vote_counter = Counter(vote)
             party_rep_nums = {id: int(np.round((vote_count/self.N)*self.rep_num))
@@ -224,17 +241,20 @@ class District:
         elected_position = np.mean([elected.x for elected in elected_pool])
 
         resident_opis = np.array([resident.x for resident in self.residents])
-        opi_diffs = np.abs(resident_opis - elected_position)
 
-        # k = steepness of logit
-        # re_loc is re-centering the logit function
-        k = -5
-        re_loc = 1
-        logit = 1 / (1 + np.exp(-k*(opi_diffs - re_loc)))
-        trust_update = 0.5 - logit # flip logit horizontally and readjust min, max (-0.5, 0.5)
+        # re-center and flip to convert distance from (0,2) -> (1,-1)
+        opi_diffs = 1 - np.abs(resident_opis - elected_position)
 
-        for resident in self.residents:
-            resident.trust = resident.trust + trust_update
+        # Electoral trust
+        et = np.array([resident.trust for resident in self.residents])
+
+        # alpha determines the strength of trust update
+        min_alpha = 0.05 # 5% update minimum
+        alpha = np.maximum(0.5 - np.abs(0.5 - et), min_alpha)
+        new_et = np.maximum(np.minimum(et + (alpha*opi_diffs), 1), 0) # clip values at (0,1)
+
+        for i, resident in enumerate(self.residents):
+            resident.trust = new_et[i]
 
         # what if no agents vote?
 

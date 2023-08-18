@@ -12,7 +12,8 @@ class Election:
                  party_num = None, party_sd = 0.2,
                  district_num = 1, voting='deterministic',
                  opinion_distribution = "uniform",
-                 gaussian_mu = 0, gaussian_sd = 0.5):
+                 gaussian_mu = 0, gaussian_sd = 0.5,
+                 elect_fb = False):
         """
         Initializes the election model.
 
@@ -28,9 +29,11 @@ class Election:
         opinion_distribution: distribution of opinions of the district residents
         gaussian_mu: mean of the gaussian distribution of opinions
         gaussian_sd: standard deviation of the gaussian distribution of opinions
+        elect_fb: whether electoral feedback is activated allowing residents to update their electoral trust
         """
         self.voting = voting
         self.opinion_distribution = opinion_distribution
+        self.elect_fb = elect_fb
 
         self.districts = []
         Nd = int(np.round(N / district_num)) # number of residents per district
@@ -92,14 +95,22 @@ class Election:
 
         for district in self.districts:
             district.nominate(self.parties)
-            district.vote(voting=self.voting, parties=self.parties)
+            district.vote(voting=self.voting, parties=self.parties,
+                          trust_based=self.elect_fb)
 
             self.elected_pool.extend(district.elected)
-            self.elected_party_pool.extend(district.elected_party)
+            if len(self.parties) > 0:
+                self.elected_party_pool.extend(district.elected_party)
 
         # cumulative elected representative pool
         self.cum_elected_pool.extend(self.elected_pool)
-        self.cum_elected_party_pool(self.elected_party_pool)
+        if len(self.parties) > 0:
+            self.cum_elected_party_pool.extend(self.elected_party_pool)
+
+        # electoral feedback updating residents' electoral trust
+        if self.elect_fb:
+            for district in self.districts:
+                district.appraise(self.elected_pool)
 
         # reset candidates after an election
         for party in self.parties:

@@ -4,30 +4,41 @@ import seaborn as sns
 from scipy.spatial import distance
 from election_model import Election
 
-fixed_params = {'N': 10000,
+fixed_params = {'N': 2000,
                 'nom_rate': 0.05,
                 'rep_num': 10,
-                'party_num': 10,
-                'district_num': 1,
+                'party_num': 5,
+                'district_num': 2,
                 'voting': 'proportional_rep',
-                'opinion_distribution': 'gaussian'}
+                'opinion_distribution': 'uniform',
+                'elect_fb': True}
 
 n_sim = 1
-n_iter = 1000
-print_interval = 1000
+n_iter = 5000
+print_interval = 500
 max_js_distance = 0.8325546111576977
 
 simple_election = Election(**fixed_params)
+trust_list = []
 
 for i in range(n_iter):
     if i % print_interval == 0:
         print('iteration: {}'.format(i))
     simple_election.step()
 
+    if fixed_params['elect_fb']:
+        tmp_list = []
+        for district in simple_election.districts:
+            tmp_list.extend([resident.trust for resident in district.residents])
+
+        trust_list.append(tmp_list)
+
 print('simulation is complete.')
+trust_array = np.array(trust_list)
+sns.heatmap(trust_array)
+plt.show()
 
-
-elected_opis = np.array([elected.x for elected in simple_election.elected_pool])
+elected_opis = np.array([elected.x for elected in simple_election.cum_elected_pool])
 resident_opis = []
 for i in range(fixed_params['district_num']):
     district = simple_election.districts[i]

@@ -121,13 +121,13 @@ class District:
         if trust_based:
             et = np.array([resident.trust for resident in self.residents])
             is_vote = np.random.binomial(n=1, p=et, size=self.N).astype(bool)
+            is_vote = (is_vote | self.nom_msks)
+
+            resident_opis = resident_opis[is_vote]
 
         # Deterministic voting
         if voting == "deterministic":
             vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
-
-            if trust_based:
-                vote = vote[is_vote]
 
             vote_counter = Counter(vote)
             self.elected = [candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)]
@@ -141,9 +141,6 @@ class District:
             tmp_randnums = np.random.uniform(0, 1, size=resident_opis.shape[0])
 
             vote = (elect_cumprobs < tmp_randnums[:,None]).sum(axis=1)
-
-            if trust_based:
-                vote = vote[is_vote]
 
             vote_counter = Counter(vote)
             self.elected = [candidates[id] for (id, vote_count) in vote_counter.most_common(self.rep_num)]
@@ -178,20 +175,17 @@ class District:
             # residents vote for the closest candidate
             vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
 
-            if trust_based:
-                vote = vote[is_vote]
-
             vote_counter = Counter(vote)
             winner_id = vote_counter.most_common(1)[0][0]
 
             # mark winning candidate as being elected
             candidates[winner_id].elected = True
 
-            self.elected = candidates[winner_id]
-            self.cum_elected.append(self.elected)
+            self.elected = [candidates[winner_id]]
+            self.cum_elected.extend(self.elected)
 
-            self.elected_party = winner_id
-            self.cum_elected_party.append(self.elected_party)
+            self.elected_party = [winner_id]
+            self.cum_elected_party.extend(self.elected_party)
 
         # Proportional representation (closed list)
         else:
@@ -199,9 +193,6 @@ class District:
 
             # residents vote for the closest party
             vote = np.argmin(np.abs(np.subtract.outer(resident_opis, party_opis)), axis=1)
-
-            if trust_based:
-                vote = vote[is_vote]
 
             vote_counter = Counter(vote)
             party_rep_nums = {id: int(np.round((vote_count/self.N)*self.rep_num))
@@ -235,6 +226,7 @@ class District:
                 self.elected_party = [pid] * elected_num
                 self.cum_elected_party.extend(self.elected_party)
 
+
     def appraise(self, elected_pool):
 
         # Average position of the representatives
@@ -255,6 +247,4 @@ class District:
 
         for i, resident in enumerate(self.residents):
             resident.trust = new_et[i]
-
-        # what if no agents vote?
 

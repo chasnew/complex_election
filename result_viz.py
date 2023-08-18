@@ -4,12 +4,40 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+max_js_distance = 0.8325546111576977
 scenario_list = ['deterministic', 'one_per_party', 'proportional_rep']
 
 result_list = []
 
 for scenario in scenario_list:
-    tmp_df = pd.read_csv('results/{}_result.csv'.format(scenario))
+    tmp_df = pd.read_csv('results/elect10k_{}_results.csv'.format(scenario))
     result_list.append(tmp_df)
 
-result_df = pd.concat(result_list)
+result_df = pd.concat(result_list).reset_index(drop=True)
+
+det_results = result_df[result_df['voting'] == 'deterministic']
+det_results['rep_dist_num'] = det_results['rep_num'].astype(str) + '_' + det_results['district_num'].astype(str)
+det_results['party_num'] = det_results['party_num'].astype(str)
+sns.swarmplot(det_results, x='rep_dist_num', y='js_distance', hue='party_num')
+plt.show()
+
+major_results = result_df[result_df['voting'] == 'one_per_party']
+major_results['party_num'] = major_results['party_num'].astype(str)
+sns.swarmplot(major_results, x='district_num', y='js_distance', hue='party_num')
+plt.show()
+
+propr_results = result_df[result_df['voting'] == 'proportional_rep']
+propr_results['rep_dist_num'] = propr_results['rep_num'].astype(str) + '_' + propr_results['district_num'].astype(str)
+propr_results['party_num'] = propr_results['party_num'].astype(str)
+sns.swarmplot(propr_results, x='rep_dist_num', y='js_distance', hue='party_num')
+plt.show()
+
+
+cond1 = (result_df['voting'] == 'deterministic') & (result_df['district_num'] == 10) &\
+        (result_df['rep_num'] == 1) & (result_df['party_num'].isin([2,5,10]))
+cond2 = (result_df['voting'] == 'one_per_party') & (result_df['district_num'] == 10)
+cond3 = (result_df['voting'] == 'proportional_rep') & (result_df['district_num'] == 1) &\
+        (result_df['rep_num'] == 10)
+
+sns.swarmplot(result_df[cond1 | cond2 | cond3], x='voting', y='js_distance', hue='party_num')
+plt.show()

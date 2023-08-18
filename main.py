@@ -81,7 +81,6 @@ if __name__ == '__main__':
     print_interval = config_params['print_interval']
     elect_system = config_params['scenario']
     process_num = 2  # int(os.getenv('SLURM_CPUS_ON_NODE'))
-    max_js_distance = 0.8325546111576977
 
     # keys for collecting data from the model
     model_keys = ['party_num', 'district_num', 'rep_num', 'voting', 'distribution', 'js_distance']

@@ -35,7 +35,7 @@ class District:
             b = (upper - gaussian_mu) / gaussian_sd  # upper sd cutoff
             init_opis = stats.truncnorm(a, b, loc=gaussian_mu, scale=gaussian_sd).rvs(N)
 
-        self.residents = np.array([Resident(i, self.d_id, init_opis[i]) for i in range(N)])
+        self.residents = np.array([Resident(id_=i, d_id=self.d_id, x=init_opis[i]) for i in range(N)])
         self.N = N
         self.nom_rate = nom_rate
         self.rep_num = rep_num
@@ -120,6 +120,10 @@ class District:
 
         if trust_based:
             et = np.array([resident.trust for resident in self.residents])
+
+            if any(np.isnan(et)):
+                print('nan count: {}'.format(np.sum(np.isnan(et))))
+
             is_vote = np.random.binomial(n=1, p=et, size=self.N).astype(bool)
             is_vote = (is_vote | self.nom_msks)
 
@@ -193,10 +197,26 @@ class District:
 
             # residents vote for the closest party
             vote = np.argmin(np.abs(np.subtract.outer(resident_opis, party_opis)), axis=1)
-
             vote_counter = Counter(vote)
-            party_rep_nums = {id: int(np.round((vote_count/self.N)*self.rep_num))
-                              for (id, vote_count) in vote_counter.items()}
+
+            # Calculate seats for each party (d'Hondt method)
+            party_rep_nums = {}
+            a_ratio = {} # advantage ratio
+            for pid, vote_count in vote_counter.items():
+                party_rep_nums[pid] = 0
+                a_ratio[pid] = vote_count
+
+            while (sum(party_rep_nums.values())) < self.rep_num:
+                max_a = max(a_ratio.values())
+                next_seat = list(a_ratio.keys())[list(a_ratio.values()).index(max_a)]
+                party_rep_nums[next_seat] += 1
+
+                a_ratio[next_seat] = vote_counter[next_seat]/(party_rep_nums[next_seat] + 1)
+
+            # print('Seats allocation: {}'.format(party_rep_nums))
+
+            self.elected = []
+            self.elected_party = []
 
             # Parties select their candidates from their party pool to occupy the seats
             for (pid, elected_num) in party_rep_nums.items():
@@ -204,6 +224,8 @@ class District:
                 # party candidates who haven't been elected yet
                 p_candidates = np.array([candidate for candidate in parties[pid].members
                                          if candidate.elected == False])
+
+                # print('Party {} has {} candidates'.format(pid, p_candidates.shape[0]))
 
                 if party_filter:
                     candidate_opis = np.array([candidate.x for candidate in p_candidates])
@@ -220,11 +242,11 @@ class District:
                 for elected_c in p_candidates[elect_ids]:
                     elected_c.elected = True
 
-                self.elected = list(p_candidates[elect_ids])
-                self.cum_elected.extend(self.elected)
+                self.elected.extend(list(p_candidates[elect_ids]))
+                self.elected_party.extend([pid] * elected_num)
 
-                self.elected_party = [pid] * elected_num
-                self.cum_elected_party.extend(self.elected_party)
+            self.cum_elected.extend(self.elected)
+            self.cum_elected_party.extend(self.elected_party)
 
 
     def appraise(self, elected_pool):
@@ -244,6 +266,10 @@ class District:
         min_alpha = 0.05 # 5% update minimum
         alpha = np.maximum(0.5 - np.abs(0.5 - et), min_alpha)
         new_et = np.maximum(np.minimum(et + (alpha*opi_diffs), 1), 0) # clip values at (0,1)
+
+        # if any(np.isnan(new_et)):
+        #     print('Elected position = {}'.format(elected_position))
+        #     print(len(elected_pool))
 
         for i, resident in enumerate(self.residents):
             resident.trust = new_et[i]

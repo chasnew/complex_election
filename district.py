@@ -236,7 +236,12 @@ class District:
                 else:
                     elect_probs = np.ones(len(p_candidates)) / len(p_candidates)
 
-                elect_ids = np.random.choice(np.arange(len(p_candidates)), p=elect_probs, size=elected_num)
+                # if number of seats is greater than the party size
+                if elected_num > len(p_candidates):
+                    elect_ids = np.arange(len(p_candidates))
+                else:
+                    elect_ids = np.random.choice(np.arange(len(p_candidates)), p=elect_probs,
+                                                 replace=False, size=elected_num)
 
                 # mark candidate as being elected
                 for elected_c in p_candidates[elect_ids]:

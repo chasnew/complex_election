@@ -80,6 +80,7 @@ if __name__ == '__main__':
     n_iter = config_params['iter_num']
     print_interval = config_params['print_interval']
     elect_system = config_params['scenario']
+    op_distr = fixed_params['opinion_distribution']
     process_num = 2  # int(os.getenv('SLURM_CPUS_ON_NODE'))
 
     # keys for collecting data from the model
@@ -95,9 +96,9 @@ if __name__ == '__main__':
 
         if elect_system == 'deterministic':
             # Baseline scenario
-            variable_params = {'rep_num': [1],
-                               'party_num': [0],
-                               'district_num': [1],
+            variable_params = {'rep_num': [1, 10],
+                               'party_num': [0, 1, 2, 5, 10],
+                               'district_num': [1, 10],
                                'voting': ['deterministic']}
 
             combo_vparams = [dict(zip(variable_params.keys(), a))
@@ -111,8 +112,8 @@ if __name__ == '__main__':
         elif elect_system == 'one_per_party':
             # First-past-the-post
             variable_params = {'rep_num': [1],
-                               'party_num': [2],
-                               'district_num': [10],
+                               'party_num': [2, 5, 10],
+                               'district_num': [1, 5, 10, 50, 100],
                                'voting': ['one_per_party']}
 
             combo_vparams = [dict(zip(variable_params.keys(), a))
@@ -126,15 +127,15 @@ if __name__ == '__main__':
         elif elect_system == 'proportional_rep':
             # Proportional representation
             variable_params = {'rep_num': [10],
-                               'party_num': [2],
-                               'district_num': [1],
+                               'party_num': [2, 5, 10],
+                               'district_num': [1, 5, 10],
                                'voting': ['proportional_rep']}
 
             combo_vparams = [dict(zip(variable_params.keys(), a))
                              for a in itertools.product(*variable_params.values())]
             combo_vparams.extend([{'rep_num': 20, 'party_num': party_num,
                                    'district_num': 5, 'voting': 'proportional_rep'}
-                                  for party_num in [2]])
+                                  for party_num in [2, 5, 10]])
 
             tmp_results = iterate_parallel(combo_vparams, model_keys, p, process_num,
                                            n_sim, n_iter, print_interval)
@@ -150,5 +151,7 @@ if __name__ == '__main__':
     print(result_df.head())
 
     # save data
-    result_file = os.path.join(result_path, 'elect_{}_results.csv'.format(elect_system))
+    result_file = os.path.join(result_path, 'elect_{}_{}_results{}.csv'.format(elect_system,
+                                                                               op_distr,
+                                                                               config_params['batch_id']))
     result_df.to_csv(result_file, index=False)

@@ -80,6 +80,7 @@ if __name__ == '__main__':
     n_iter = config_params['iter_num']
     print_interval = config_params['print_interval']
     elect_system = config_params['scenario']
+    pop_mag = int(fixed_params['N']/1000)
     op_distr = fixed_params['opinion_distribution']
     process_num = 2  # int(os.getenv('SLURM_CPUS_ON_NODE'))
 
@@ -151,7 +152,9 @@ if __name__ == '__main__':
     print(result_df.head())
 
     # save data
-    result_file = os.path.join(result_path, 'elect_{}_{}_results{}.csv'.format(elect_system,
-                                                                               op_distr,
-                                                                               config_params['batch_id']))
+    filename = 'elect{}k_{}_{}_results{}.csv'.format(pop_mag, elect_system, op_distr, config_params['batch_id'])
+    if fixed_params['elect_fb']:
+        filename = 'efb_' + filename
+
+    result_file = os.path.join(result_path, filename)
     result_df.to_csv(result_file, index=False)

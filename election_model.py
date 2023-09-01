@@ -13,7 +13,7 @@ class Election:
                  district_num = 1, voting='deterministic',
                  opinion_distribution = "uniform",
                  gaussian_mu = 0, gaussian_sd = 0.5,
-                 elect_fb = False):
+                 efeedback = False):
         """
         Initializes the election model.
 
@@ -29,11 +29,11 @@ class Election:
         opinion_distribution: distribution of opinions of the district residents
         gaussian_mu: mean of the gaussian distribution of opinions
         gaussian_sd: standard deviation of the gaussian distribution of opinions
-        elect_fb: whether electoral feedback is activated allowing residents to update their electoral trust
+        efeedback: whether electoral feedback is activated allowing residents to update their electoral trust
         """
         self.voting = voting
         self.opinion_distribution = opinion_distribution
-        self.elect_fb = elect_fb
+        self.efeedback = efeedback
 
         self.districts = []
         Nd = int(np.round(N / district_num)) # number of residents per district
@@ -56,6 +56,7 @@ class Election:
                                'rep_num': lambda m: m.districts[0].rep_num,
                                'voting': lambda m: m.voting,
                                'distribution': lambda m: m.opinion_distribution,
+                               'efeedback': lambda m: m.efeedback,
                                'js_distance': lambda m: m.position_dissimilarity()}
 
 
@@ -96,7 +97,7 @@ class Election:
         for district in self.districts:
             district.nominate(self.parties)
             district.vote(voting=self.voting, parties=self.parties,
-                          trust_based=self.elect_fb)
+                          trust_based=self.efeedback)
 
             self.elected_pool.extend(district.elected)
             if len(self.parties) > 0:
@@ -108,7 +109,7 @@ class Election:
             self.cum_elected_party_pool.extend(self.elected_party_pool)
 
         # electoral feedback updating residents' electoral trust
-        if self.elect_fb:
+        if self.efeedback:
             for district in self.districts:
                 district.appraise(self.elected_pool)
 

@@ -253,16 +253,22 @@ class District:
             self.cum_elected.extend(self.elected)
             self.cum_elected_party.extend(self.elected_party)
 
-
+    '''
+    Residents updating their electoral trust (voting probability) based on
+    the difference in their policy preference and that of elected officials
+    (a possible extension is to include diverse update rules) 
+    '''
     def appraise(self, elected_pool):
 
+        # Changed from calculating distance to an average position to calculating average absolute distance
+
         # Average position of the representatives
-        elected_position = np.mean([elected.x for elected in elected_pool])
+        elected_positions = np.array([elected.x for elected in elected_pool])
 
         resident_opis = np.array([resident.x for resident in self.residents])
 
-        # re-center and flip to convert distance from (0,2) -> (1,-1)
-        opi_diffs = 1 - np.abs(resident_opis - elected_position)
+        # re-scale distance from (0,2) -> (0,1)
+        opi_diffs = np.mean(np.abs(np.subtract.outer(resident_opis, elected_positions)), axis=1) / 2
 
         # Electoral trust
         et = np.array([resident.trust for resident in self.residents])

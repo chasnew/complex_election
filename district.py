@@ -269,14 +269,19 @@ class District:
 
         # re-scale distance from (0,2) -> (0,1)
         opi_diffs = np.mean(np.abs(np.subtract.outer(resident_opis, elected_positions)), axis=1) / 2
+        # print(opi_diffs)
 
         # Electoral trust
         et = np.array([resident.trust for resident in self.residents])
 
         # alpha determines the strength of trust update
         min_alpha = 0.05 # 5% update minimum
-        alpha = np.maximum(0.5 - np.abs(0.5 - et), min_alpha)
-        new_et = np.maximum(np.minimum(et + (alpha*opi_diffs), 1), 0) # clip values at (0,1)
+        alpha = np.maximum(0.5 - np.abs(0.5 - et), min_alpha) # degree of change (more extreme trust update less)
+
+        # if preference differs lower than 0.125*2, increase trust and lower trust otherwise
+        change_et = 0.125 - opi_diffs
+
+        new_et = np.maximum(np.minimum(et + (alpha*change_et), 1), 0) # clip values at (0,1)
 
         # if any(np.isnan(new_et)):
         #     print('Elected position = {}'.format(elected_position))

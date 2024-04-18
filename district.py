@@ -125,7 +125,7 @@ class District:
                 print('nan count: {}'.format(np.sum(np.isnan(et))))
 
             is_vote = np.random.binomial(n=1, p=et, size=self.N).astype(bool)
-            is_vote = (is_vote | self.nom_msks)
+            is_vote = (is_vote | self.nom_msks) # candidates always vote
 
             resident_opis = resident_opis[is_vote]
 

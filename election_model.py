@@ -82,13 +82,20 @@ class Election:
         else:
             self.parties = []
 
+        self.elected_pool = []
+        self.elected_party_pool = []
+
+        self.cum_elected_pool = []
+        self.cum_elected_party_pool = []
+
         self.model_reporter = {'party_num': lambda m: len(m.parties),
                                'district_num': lambda m: len(m.districts),
                                'rep_num': lambda m: m.districts[0].rep_num,
                                'voting': lambda m: m.voting,
                                'distribution': lambda m: m.opinion_distribution,
                                'efeedback': lambda m: m.efeedback,
-                               'js_distance': lambda m: m.position_dissimilarity()}
+                               'js_distance': lambda m: m.position_dissimilarity(),
+                               'avg_close_elected': lambda m: m.agg_mean_close_distance()}
 
         self.step_reporter = {'party_num': lambda m: len(m.parties),
                               'district_num': lambda m: len(m.districts),
@@ -96,12 +103,6 @@ class Election:
                               'voting': lambda m: m.voting,
                               'avg_trust': lambda m: m.mean_trust(),
                               'avg_close_elected': lambda m: m.mean_close_distance()}
-
-        self.elected_pool = []
-        self.elected_party_pool = []
-
-        self.cum_elected_pool = []
-        self.cum_elected_party_pool = []
 
     def mean_close_distance(self):
         '''
@@ -157,6 +158,25 @@ class Election:
         elect_hists = elect_hists / elect_hists.sum()
 
         return distance.jensenshannon(res_hists, elect_hists)
+
+    def agg_mean_close_distance(self):
+        '''
+        Calculate the average distance to closest accumulated elected candidates from every district
+        :return: Average distance to closest elected candidates
+        '''
+
+        elected_opis = np.array([elected.x for elected in self.cum_elected_pool])
+        resident_opis = []
+
+        for i in range(len(self.districts)):
+            district = self.districts[i]
+            resident_opis.extend([resident.x for resident in district.residents])
+
+        resident_opis = np.array(resident_opis)
+
+        avg_dist = np.mean(np.min(np.abs(np.subtract.outer(resident_opis, elected_opis)), axis=1))
+
+        return avg_dist
 
     def step(self):
 

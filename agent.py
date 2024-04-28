@@ -18,6 +18,7 @@ class Resident:
         self.d_id = d_id
         self.x = x
         self.trust = trust
+        self.party_aff = None # party affiliation for proportional representation
 
     def __repr__(self):
         """

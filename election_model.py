@@ -79,6 +79,8 @@ class Election:
                 self.parties = [Party(i, party_pos[i], party_sd) for i in range(party_num)]
 
             self.party_sd = party_sd
+
+            self.affiliate_party() # affiliate residents to each party
         else:
             self.parties = []
 
@@ -178,6 +180,19 @@ class Election:
 
         return avg_dist
 
+    def affiliate_party(self):
+        for district in self.districts:
+            d_residents = district.residents
+            resident_opis = np.array([resident.x for resident in district.residents])
+
+            party_opis = [party.x for party in self.parties]
+
+            # residents affiliate with the closest party
+            aff = np.argmin(np.abs(np.subtract.outer(resident_opis, party_opis)), axis=1)
+
+            for ind, resident in enumerate(d_residents):
+                resident.party_aff = aff[ind]
+
     def step(self):
 
         # reset candidate pools for the new election cycle
@@ -201,8 +216,26 @@ class Election:
 
         # electoral feedback updating residents' electoral trust
         if self.efeedback:
-            for district in self.districts:
-                district.appraise(self.elected_pool)
+            if (self.voting == 'deterministic') or (self.voting == 'probabilistic'):
+                appraise_target = 'global'
+                for district in self.districts:
+                    district.appraise(appraise_target, self.elected_pool)
+            elif (self.voting == 'one_per_party'):
+                appraise_target = 'local'
+                for district in self.districts:
+                    district.appraise(appraise_target, None)
+            elif (self.voting == 'proportional_rep'):
+                appraise_target = 'party'
+                party_elected_list = []
+                for i in range(len(self.parties)):
+                    tmp_elected = [candidate for candidate in self.elected_pool if candidate.party_id == i]
+                    party_elected_list.append(tmp_elected)
+
+                for district in self.districts:
+                    district.appraise(appraise_target, party_elected_list)
+
+
+
 
         # reset candidates after an election
         for party in self.parties:

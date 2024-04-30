@@ -61,7 +61,7 @@ class Election:
                 start = int((-1 + gap_size/2)*1000)
                 stop = 1000
                 jump = int(gap_size*1000)
-                party_pos = [pos for pos in range(start, stop, jump)] # party positions evenly spaced out
+                party_pos = [pos / 1000 for pos in range(start, stop, jump)] # party positions evenly spaced out
             else:
                 # creating parties randomly
                 party_pos = np.random.uniform(-1, 1, size=party_num)

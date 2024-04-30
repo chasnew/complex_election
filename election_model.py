@@ -53,26 +53,8 @@ class Election:
         if (party_num != None) and (party_num > 0):
             # creating parties based on residents' values and parties try to be distinct
             if polarization:
-                party_pos = []
-                res_inds = np.arange(meta_residents.shape[0])
-                meta_opis = np.array([resident.x for resident in meta_residents])
-                likelihood_mass = np.ones(meta_residents.shape[0])
-
-                for i in range(party_num):
-                    party_probs = likelihood_mass / likelihood_mass.sum()
-                    rp_ind = np.random.choice(res_inds, p=party_probs)
-                    party_pos.append(meta_residents[rp_ind].x)
-
-                    diff_square = np.square(meta_opis - meta_residents[rp_ind].x)
-                    gaussian_filter = np.exp((-diff_square) / (2 * np.square(party_sd)))
-
-                    likelihood_mass = likelihood_mass - gaussian_filter
-                    likelihood_mass[likelihood_mass < 0] = 0
-                    if all(likelihood_mass == 0):
-                        likelihood_mass += 0.1
-
-                party_pos = np.array(party_pos)
-                self.parties = [Party(i, party_pos[i], party_sd) for i in range(party_num)]
+                gap_size = 2 / party_num # preference space absolute length = 2
+                party_pos = [pos for pos in range(gap_size/2, 1, gap_size)] # party positions evenly spaced out
             else:
                 # creating parties randomly
                 party_pos = np.random.uniform(-1, 1, size=party_num)

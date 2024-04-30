@@ -8,7 +8,7 @@ class District:
     An object representing a district that holds an election
     """
 
-    def __init__(self, d_id, N, nom_rate = 0.05, rep_num = 1,
+    def __init__(self, d_id, N, nom_rate = 5, rep_num = 1,
                  opinion_distribution = "uniform",
                  gaussian_mu = 0, gaussian_sd = 0.5):
         """
@@ -18,7 +18,7 @@ class District:
         ----------
         d_id: district id
         N : number of residents (agents)
-        nom_rate: nomination rate (the rate at which residents become political candidates)
+        nom_rate: fixed number of nominated candidates (per party if parties exist)
         rep_num: number of representatives
         opinion_distribution: distribution of opinions of the district residents
         gaussian_mu: mean of the gaussian distribution of opinions
@@ -53,60 +53,30 @@ class District:
             party_sd = parties[0].sd
 
             tmp_opis = np.array([resident.x for resident in self.residents])
-            diff = np.abs(np.subtract.outer(party_opis, tmp_opis))
-
-            # pre-select residents to be core members of the party ensuring that parties have at least one candidate
-            top_candidates = np.argpartition(diff, len(parties))[:,:len(parties)]
-            core_list = []
-
-            for i in range(len(parties)):
-                for j in range(len(top_candidates)):
-                    if top_candidates[i,j] not in core_list:
-                        core_list.append(top_candidates[i,j])
-                        break
+            diff = np.abs(np.subtract.outer(party_opis, tmp_opis)) # differences in preferences
 
             # gaussian filter of party selection
             diff_square = np.square(diff)
             gaussian_filter = np.exp((-diff_square)/(2*np.square(party_sd)))
-            party_nom = np.random.binomial(n=1, p=gaussian_filter).astype(bool) # party selection of residents
-            self_nom = np.random.binomial(n=1, p=self.nom_rate, size=self.N).astype(bool) # resident self-nomination
+            nom_party_probs = gaussian_filter / np.sum(gaussian_filter, axis=1)[:, np.newaxis]
 
-            party_msks = (party_nom & self_nom)
-
-            # setting mask for core members of the parties
-            for i in range(len(parties)):
-                party_msks[:,core_list[i]] = False
-                party_msks[i,core_list[i]] = True
-
-            # assigning candidates w/ more than 1 parties to a specific party
-            multip_msks = party_msks.sum(axis=0) > 1
-            multip_ids = np.arange(self.N)[multip_msks]
-
-            party_ids = np.arange(len(parties))
-
-            for i in multip_ids:
-                # extract diff in opinions of candidate and parties that recruit them
-                indv_diff = diff[party_msks[:,i],i]
-                party_probs = (indv_diff / np.sum(indv_diff))
-
-                # print('party_probability = {}'.format(party_probs))
-                # print(party_msks[:,i])
-
-                party = np.random.choice(party_ids[party_msks[:,i]],
-                                         size = 1, p = party_probs)
-
-                party_msks[:,i] = False
-                party_msks[party,i] = True
-
-            self.nom_msks = np.any(party_msks, axis=0)
+            self.nom_msks = np.zeros(self.N).astype(bool)
 
             # party member list is extended with local candidates
             for party in parties:
+                avail_inds = np.arange(self.N)[~self.nom_msks]
+                nom_party_inds = np.random.choice(avail_inds, size=self.nom_rate,
+                                                  replace=False, p=nom_party_probs[party.id])
                 district_candidates = [Candidate(resident.id, self.d_id, resident.x, party.id)
-                                       for resident in self.residents[party_msks[party.id,:]]]
+                                       for resident in self.residents[nom_party_inds]]
                 party.members.extend(district_candidates)
+
+                self.nom_msks[nom_party_inds] = True
+
         else:
-            self.nom_msks = np.random.binomial(n=1, p=self.nom_rate, size=self.N).astype(bool)
+            nom_inds = np.random.choice(np.arange(self.N), size=self.nom_rate, replace=False)
+            self.nom_msks = np.zeros(self.N).astype(bool)
+            self.nom_msks[nom_inds] = True
 
 
     def vote(self, voting="deterministic", parties=[],

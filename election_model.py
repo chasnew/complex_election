@@ -9,7 +9,7 @@ class Election:
     Represents an electoral system
     """
 
-    def __init__(self, N, nom_rate = 0.05, rep_num = 1,
+    def __init__(self, N, nom_rate = 5, rep_num = 1,
                  party_num = None, party_sd = 0.2, polarization = True,
                  district_num = 1, voting='deterministic',
                  opinion_distribution = "uniform",
@@ -39,6 +39,10 @@ class Election:
         self.districts = []
         Nd = int(np.round(N / district_num)) # number of residents per district
 
+        # make sure to enough candidates for the number of seats
+        if rep_num > nom_rate:
+            nom_rate = rep_num + 1
+
         meta_residents = []
         for i in range(district_num):
             district = District(i, Nd, nom_rate, rep_num,
@@ -58,8 +62,8 @@ class Election:
             else:
                 # creating parties randomly
                 party_pos = np.random.uniform(-1, 1, size=party_num)
-                self.parties = [Party(i, party_pos[i], party_sd) for i in range(party_num)]
 
+            self.parties = [Party(i, party_pos[i], party_sd) for i in range(party_num)]
             self.party_sd = party_sd
 
             self.affiliate_party() # affiliate residents to each party

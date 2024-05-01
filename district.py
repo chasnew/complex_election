@@ -194,9 +194,10 @@ class District:
             # Parties select their candidates from their party pool to occupy the seats
             for (pid, elected_num) in party_rep_nums.items():
 
-                # party candidates who haven't been elected yet
+                # local party candidates
                 p_candidates = np.array([candidate for candidate in parties[pid].members
-                                         if candidate.elected == False])
+                                         if candidate.d_id == self.d_id])
+                # if candidate.elected == False (check when party candidates are pooled globally)
 
                 # print('Party {} has {} candidates'.format(pid, p_candidates.shape[0]))
 

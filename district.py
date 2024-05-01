@@ -58,15 +58,17 @@ class District:
             # gaussian filter of party selection
             diff_square = np.square(diff)
             gaussian_filter = np.exp((-diff_square)/(2*np.square(party_sd)))
-            nom_party_probs = gaussian_filter / np.sum(gaussian_filter, axis=1)[:, np.newaxis]
 
             self.nom_msks = np.zeros(self.N).astype(bool)
 
             # party member list is extended with local candidates
             for party in parties:
-                avail_inds = np.arange(self.N)[~self.nom_msks]
+                avail_inds = np.arange(self.N)[~self.nom_msks] # filter out already recruited residents
+
+                avail_gaussian = gaussian_filter[party.id][avail_inds]
+                nom_party_probs = avail_gaussian / np.sum(avail_gaussian)
                 nom_party_inds = np.random.choice(avail_inds, size=self.nom_rate,
-                                                  replace=False, p=nom_party_probs[party.id])
+                                                  replace=False, p=nom_party_probs)
                 district_candidates = [Candidate(resident.id, self.d_id, resident.x, party.id)
                                        for resident in self.residents[nom_party_inds]]
                 party.members.extend(district_candidates)
@@ -131,7 +133,7 @@ class District:
 
                 # local party candidates in the district
                 pd_candidates = np.array([candidate for candidate in parties[pid].members
-                                                 if candidate.d_id == self.d_id])
+                                          if candidate.d_id == self.d_id])
                 if party_filter:
                     party_candidate_opis = np.array([candidate.x for candidate in pd_candidates])
 

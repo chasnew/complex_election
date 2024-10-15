@@ -46,6 +46,8 @@ class District:
         self.cum_elected = []
         self.cum_elected_party = []
 
+        self.vote_masks = []
+
 
     def nominate(self, parties=[]):
         if (len(parties) > 0):
@@ -98,6 +100,8 @@ class District:
 
             is_vote = np.random.binomial(n=1, p=et, size=self.N).astype(bool)
             is_vote = (is_vote | self.nom_msks) # candidates always vote
+
+            self.vote_masks = is_vote
 
             resident_opis = resident_opis[is_vote]
 

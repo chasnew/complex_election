@@ -239,7 +239,7 @@ class District:
     def appraise(self, appraise_target, elected_pool=None):
 
         # Changed from calculating distance to an average position to calculating average absolute distance
-        if appraise_target != 'party':
+        if appraise_target != 'close_global':
             if appraise_target == 'local':
                 elected_pool = self.elected
 
@@ -272,41 +272,33 @@ class District:
                 resident.trust = new_et[i]
 
         else:
-            # Resident compare their opinions to their own party (unlikely to work because parties have fixed spread)
-            # probably going to change to look at relative number of their chosen party
+            # Resident compare their opinions to the closest representative (proportional representation)
 
-            # iterate over elected candidates from different parties
-            for ind, party_elected in enumerate(elected_pool):
+            # positions of the representatives
+            elected_positions = np.array([elected.x for elected in elected_pool])
 
-                # Average position of the representatives
-                elected_positions = np.array([elected.x for elected in party_elected])
+            resident_opis = np.array([resident.x for resident in self.residents])
 
-                party_residents = np.array([resident for resident in self.residents if resident.party_aff == ind])
-                resident_opis = np.array([resident.x for resident in party_residents])
+            # re-scale distance from (0,2) -> (0,1)
+            close_opidiffs = np.min(np.abs(np.subtract.outer(resident_opis, elected_positions)), axis=1) / 2
 
-                # re-scale distance from (0,2) -> (0,1)
-                if len(party_elected) > 0:
-                    opi_diffs = np.mean(np.abs(np.subtract.outer(resident_opis, elected_positions)), axis=1) / 2
-                else:
-                    opi_diffs = np.full(party_residents.shape[0], 0.2)
+            # Electoral trust
+            et = np.array([resident.trust for resident in self.residents])
 
-                # Electoral trust
-                et = np.array([resident.trust for resident in party_residents])
+            # alpha determines the strength of trust update
+            min_alpha = 0.05  # 5% update minimum
+            alpha = np.maximum(0.5 - np.abs(0.5 - et),
+                               min_alpha)  # degree of change (more extreme trust update less)
 
-                # alpha determines the strength of trust update
-                min_alpha = 0.05  # 5% update minimum
-                alpha = np.maximum(0.5 - np.abs(0.5 - et),
-                                   min_alpha)  # degree of change (more extreme trust update less)
+            # if preference differs lower than 0.125*2, increase trust and lower trust otherwise
+            change_et = 0.125 - close_opidiffs
 
-                # if preference differs lower than 0.125*2, increase trust and lower trust otherwise
-                change_et = 0.125 - opi_diffs
+            new_et = np.maximum(np.minimum(et + (alpha * change_et), 1), 0)  # clip values at (0,1)
 
-                new_et = np.maximum(np.minimum(et + (alpha * change_et), 1), 0)  # clip values at (0,1)
+            # if any(np.isnan(new_et)):
+            #     print('Elected position = {}'.format(elected_position))
+            #     print(len(elected_pool))
 
-                # if any(np.isnan(new_et)):
-                #     print('Elected position = {}'.format(elected_position))
-                #     print(len(elected_pool))
-
-                for i, resident in enumerate(party_residents):
-                    resident.trust = new_et[i]
+            for i, resident in enumerate(self.residents):
+                resident.trust = new_et[i]
 

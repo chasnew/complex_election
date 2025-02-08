@@ -122,23 +122,6 @@ class District:
             dists = np.abs(np.subtract.outer(resident_opis, party_opis))
 
 
-        # re-scale distance from (0,2) -> (1,0)
-        reversed_dists = 1 - (dists / 2)
-        pref_thresh = 0.875  # if preference differs lower than 0.125*2
-        reversed_dists[reversed_dists < pref_thresh] = 0
-        # need to check for residents who are too far from every party
-
-        # propensity to not waste vote
-        # only applies with more than 2 parties!
-        party_num = len(parties)
-        k = 1
-        # not straight forward for plurality voting with more than 2 parties
-
-        strat_props = 1 / (1 + np.exp(-k * ((1 / self.rep_num) - self.prev_vote_props)))
-
-        vote = np.argmax(reversed_dists * strat_props, axis=1)
-
-
     def vote(self, voting="deterministic", parties=[],
              strategic=False, party_filter=False):
 

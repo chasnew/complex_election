@@ -8,7 +8,9 @@ class District:
     An object representing a district that holds an election
     """
 
-    def __init__(self, d_id, N, nom_rate = 5, rep_num = 1, alpha = 0.5,
+    def __init__(self, d_id, N, party_num = None,
+                 nom_rate = 5, rep_num = 1,
+                 alpha = 0.5, beta = 0.5,
                  opinion_distribution = "uniform",
                  gaussian_mu = 0, gaussian_sd = 0.5):
         """
@@ -18,6 +20,7 @@ class District:
         ----------
         d_id: district id
         N : number of residents (agents)
+        party_num: number of political parties
         nom_rate: fixed number of nominated candidates (per party if parties exist)
         rep_num: number of representatives
         alpha: memory bias when evaluating winning probability of each party
@@ -41,6 +44,7 @@ class District:
         self.nom_rate = nom_rate
         self.rep_num = rep_num
         self.alpha = alpha
+        self.beta = beta
 
         self.nom_msks = []
         self.elected = []
@@ -49,7 +53,9 @@ class District:
         self.cum_elected_party = []
 
         self.vote_masks = []
-        self.prev_vote_props = [] # vote proportion of each party in previous election cycle
+
+        # vote proportion of each party in previous election cycle (initially 0 for all)
+        self.prev_vote_props = np.zeros(party_num)
 
 
     def nominate(self, parties=[]):
@@ -84,42 +90,6 @@ class District:
             nom_inds = np.random.choice(np.arange(self.N), size=self.nom_rate, replace=False)
             self.nom_msks = np.zeros(self.N).astype(bool)
             self.nom_msks[nom_inds] = True
-
-
-    def evaluate(self, voting="deterministic", parties=[]):
-        candidates = self.residents[self.nom_msks]
-        candidate_opis = np.array([candidate.x for candidate in candidates])
-
-        # every resident votes
-        resident_opis = np.array([resident.x for resident in self.residents])
-
-        # Single candidate per party (First-past-the-post)
-        if voting == "one_per_party":
-            candidates = [0] * len(parties)
-            candidate_opis = np.full(len(parties), 0).astype(np.float64)
-
-            # Parties nominate one candidate to enter the race
-            for i in range(len(parties)):
-                pid = parties[i].id
-
-                # local party candidates in the district
-                pd_candidates = np.array([candidate for candidate in parties[pid].members
-                                          if candidate.d_id == self.d_id])
-
-                party_nom_probs = np.ones(len(pd_candidates)) / len(pd_candidates)
-
-                candidates[pid] = np.random.choice(pd_candidates, p=party_nom_probs, size=1)[0]
-                candidate_opis[pid] = candidates[pid].x
-
-            candidates = np.array(candidates)
-
-            # residents vote for the closest candidate
-            dists = np.abs(np.subtract.outer(resident_opis, candidate_opis))
-
-        # Proportional representation (closed list)
-        else:
-            party_opis = [party.x for party in parties]
-            dists = np.abs(np.subtract.outer(resident_opis, party_opis))
 
 
     def vote(self, voting="deterministic", parties=[],
@@ -193,35 +163,7 @@ class District:
 
             # Strategic voting
             if len(parties) > 2 and strategic:
-                dists = np.abs(np.subtract.outer(resident_opis, candidate_opis))
-                # Consequence of distant measure:
-                # care less about alignment if parties don't perfectly align w/ preference
-
-                # reverse and re-scale distance so the furthest candidate doesn't get voted
-                max_dists = np.max(dists, axis=1)
-                rescaled_dists = ((max_dists - dists.T) / max_dists).T
-                # Consequence: extreme voters have higher tolerance (shallower slope)
-
-                # re-scale distance from (0,2) -> (1,0)
-                # reversed_dists = 1 - (dists / 2)
-                # pref_thresh = 0.875  # if preference differs lower than 0.125*2
-                # reversed_dists[reversed_dists < pref_thresh] = 0
-                # need to check for residents who are too far from every party
-
-                # ideal polling
-                sincere_vote = np.argmin(dists, axis=1)
-                sincere_vote_count = Counter(sincere_vote)
-                poll_props = np.array([sincere_vote_count[i] / sincere_vote.shape[0]
-                                       for i in range(len(parties))])
-
-                # propensity to not waste vote
-                weighted_vote_props = (self.alpha * self.prev_vote_props) + ((1 - self.alpha) * poll_props)
-                print('district {}, weighted vote props:'.format(self.d_id), weighted_vote_props)
-                # Need to solve for k if to use logistic function
-                # strat_props = 1 / (1 + np.exp(-k * ((1 / self.rep_num) - self.prev_vote_props)))
-                # 50% vote to guarantee a victory
-                win_probs = np.clip((1/0.5) * weighted_vote_props, a_min=None, a_max=1)
-                vote = np.argmax(rescaled_dists * win_probs, axis=1)
+                vote = self.strategic_vote(resident_opis, candidates, parties)
 
             # Naive voting
             else:
@@ -230,7 +172,7 @@ class District:
 
             vote_counter = Counter(vote)
             self.prev_vote_props = np.array([vote_counter[i] / vote.shape[0] for i in range(len(parties))])
-            print('district {}, vote prop', self.prev_vote_props)
+            # print('district {}, vote prop', self.prev_vote_props)
 
             winner_id = vote_counter.most_common(1)[0][0]
 
@@ -243,70 +185,62 @@ class District:
             self.elected_party = [winner_id]
             self.cum_elected_party.extend(self.elected_party)
 
-        # Proportional representation (closed list)
+        # Proportional representation; open list (proportional_rep)
+        # All candidates are on the ballots but share winnability of the party
         else:
-            party_opis = [party.x for party in parties]
+            # all local party candidates (iterate over each party)
+            district_candidates = []
+            for pid in range(len(parties)):
+                p_candidates = np.array([candidate for candidate in parties[pid].members
+                                         if candidate.d_id == self.d_id])
+
+                district_candidates.extend(p_candidates)
 
             # Strategic voting
             if len(parties) > 2 and strategic:
-                dists = np.abs(np.subtract.outer(resident_opis, party_opis))
-                # Consequence of distant measure:
-                # care less about alignment if parties don't perfectly align w/ preference
-
-                # reverse and re-scale distance so the furthest candidate doesn't get voted
-                max_dists = np.max(dists, axis=1)
-                rescaled_dists = ((max_dists - dists.T) / max_dists).T
-                # Consequence: extreme voters have higher tolerance (shallower slope)
-
-                # re-scale distance from (0,2) -> (1,0)
-                # reversed_dists = 1 - (dists / 2)
-                # pref_thresh = 0.875  # if preference differs lower than 0.125*2
-                # reversed_dists[reversed_dists < pref_thresh] = 0
-                # need to check for residents who are too far from every party
-
-                # ideal polling
-                sincere_vote = np.argmin(dists, axis=1)
-                sincere_vote_count = Counter(sincere_vote)
-                poll_props = np.array([sincere_vote_count[i] / sincere_vote.shape[0]
-                                       for i in range(len(parties))])
-
-                # propensity to not waste vote
-                weighted_vote_props = (self.alpha*self.prev_vote_props) + ((1-self.alpha)*poll_props)
-
-                # strat_props = 1 / (1 + np.exp(-k * (self.prev_vote_props - (1 / self.rep_num))))
-                # 1 / number of seats to guarantee a seat
-                crit_thresh = 1/self.rep_num
-                win_probs = np.clip((1/crit_thresh) * weighted_vote_props, a_min=None, a_max=1)
-                vote = np.argmax(rescaled_dists * win_probs, axis=1)
+                # may need an argument for proportional_rep since number of parties doesn't match candidates
+                vote = self.strategic_vote(resident_opis, district_candidates, parties)
 
             # Naive voting
             else:
                 # residents vote for the closest candidate
-                vote = np.argmin(np.abs(np.subtract.outer(resident_opis, party_opis)), axis=1)
+                candidate_opis = [candidate.x for candidate in district_candidates]
+                vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
+
+                # map candidate id to party id
+                cand_party_map = {i: [] for i in range(len(parties))}
+                for cid, candidate in enumerate(district_candidates):
+                    c_party = candidate.party_id
+                    cand_party_map[c_party].append(cid)
+
+                for i in range(len(parties)):
+                    vote[np.isin(vote, cand_party_map[i])] = i
 
             vote_counter = Counter(vote)
             self.prev_vote_props = np.array([vote_counter[i] / vote.shape[0] for i in range(len(parties))])
 
-            # residents vote for affiliated party
-            # vote = np.array([resident.party_aff for resident in self.residents])
-            # vote_counter = Counter(vote)
-
             # Calculate seats for each party (Hamilton's method)
             # Previously d'Hondt method
             party_rep_nums = {}
-            a_ratio = {} # advantage ratio
+            remainders = [0 for _ in range(len(vote_counter))]
+
+            total_vote = sum(vote_counter.values())
+            hare_quota = total_vote / self.rep_num
+
             for pid, vote_count in vote_counter.items():
-                party_rep_nums[pid] = 0
-                a_ratio[pid] = vote_count
+                tmp = vote_count / hare_quota
+                party_rep_nums[pid] = int(tmp)
+                remainders[pid] = tmp - int(tmp)
 
-            while (sum(party_rep_nums.values())) < self.rep_num:
-                max_a = max(a_ratio.values())
-                next_seat = list(a_ratio.keys())[list(a_ratio.values()).index(max_a)]
-                party_rep_nums[next_seat] += 1
+            remain_seats = self.rep_num - sum(party_rep_nums.values())
+            top_remain_parties = np.argsort(remainders)
 
-                a_ratio[next_seat] = vote_counter[next_seat]/(party_rep_nums[next_seat] + 1)
+            # print('Allocated seat num w/ full quota: ', sum(party_rep_nums.values()))
 
-            # print('Seats allocation: {}'.format(party_rep_nums))
+            for i in range(remain_seats):
+                party_rep_nums[top_remain_parties[i]] += 1
+
+            print('Seats allocation: {}'.format(party_rep_nums))
 
             self.elected = []
             self.elected_party = []
@@ -317,9 +251,6 @@ class District:
                 # local party candidates
                 p_candidates = np.array([candidate for candidate in parties[pid].members
                                          if candidate.d_id == self.d_id])
-                # if candidate.elected == False (check when party candidates are pooled globally)
-
-                # print('Party {} has {} candidates'.format(pid, p_candidates.shape[0]))
 
                 if party_filter:
                     candidate_opis = np.array([candidate.x for candidate in p_candidates])
@@ -346,6 +277,68 @@ class District:
 
             self.cum_elected.extend(self.elected)
             self.cum_elected_party.extend(self.elected_party)
+
+
+    '''
+    Strategic voting results based on previous election results as well as polling
+    '''
+    def strategic_vote(self, resident_opis, candidates, parties):
+
+        candidate_opis = []
+        candidate_party = []
+        for candidate in candidates:
+            candidate_opis.append(candidate.x)
+            candidate_party.append(candidate.party_id)
+
+        candidate_opis = np.array(candidate_opis)
+        candidate_party = np.array(candidate_party)
+
+        # preference alignment
+        dists = np.abs(np.subtract.outer(resident_opis, candidate_opis))
+
+        # clip off parties with farthest distance
+        # max_dists = np.max(dists, axis=1)
+        # max_masks = dists.T == max_dists
+        # dists.T[max_masks] = 2
+
+        # reverse and re-scale distance from (0,2) -> (1,0)
+        rescaled_dists = 1 - (dists / 2)
+
+        # winnability calculation
+        party_num = len(parties)
+
+        # ideal polling
+        sincere_vote = np.argmin(dists, axis=1)
+        sincere_vote = candidate_party[sincere_vote] # map candidate to their party
+        sincere_vote_count = Counter(sincere_vote)
+
+        poll_props = np.array([sincere_vote_count[i] / sincere_vote.shape[0]
+                               for i in range(party_num)])
+        print('poll proportion: ', poll_props)
+        print('history record: ', self.prev_vote_props)
+
+        # propensity to not waste vote
+        weighted_vote_props = (self.alpha * self.prev_vote_props) + ((1 - self.alpha) * poll_props)
+        # print('district {}, weighted vote props:'.format(self.d_id), weighted_vote_props)
+
+        # (1 / (number of seats + 1)) droop quota -> winning probability
+        crit_thresh = 1 / (self.rep_num + 1)
+        win_probs = np.clip((1 / crit_thresh) * weighted_vote_props, a_min=None, a_max=1)
+
+        # final vote decision
+        # change from product to weighted sum rescaled_dists * win_probs
+
+        # proportional representation has more candidates than parties
+        if len(candidates) > party_num:
+            win_probs = win_probs[candidate_party]
+
+        vote = np.argmax(((1 - self.beta) * rescaled_dists) + (self.beta * win_probs), axis=1)
+
+        if len(candidates) > party_num:
+            vote = candidate_party[vote] # map candidate to their party
+
+        return vote
+
 
     '''
     Residents updating their electoral trust (voting probability) based on
@@ -380,10 +373,6 @@ class District:
 
             new_et = np.maximum(np.minimum(et + (alpha*change_et), 1), 0) # clip values at (0,1)
 
-            # if any(np.isnan(new_et)):
-            #     print('Elected position = {}'.format(elected_position))
-            #     print(len(elected_pool))
-
             for i, resident in enumerate(self.residents):
                 resident.trust = new_et[i]
 
@@ -411,10 +400,5 @@ class District:
 
             new_et = np.maximum(np.minimum(et + (alpha * change_et), 1), 0)  # clip values at (0,1)
 
-            # if any(np.isnan(new_et)):
-            #     print('Elected position = {}'.format(elected_position))
-            #     print(len(elected_pool))
-
             for i, resident in enumerate(self.residents):
                 resident.trust = new_et[i]
-

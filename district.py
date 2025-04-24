@@ -101,19 +101,6 @@ class District:
         # every resident votes
         resident_opis = np.array([resident.x for resident in self.residents])
 
-        # if trust_based:
-        #     et = np.array([resident.trust for resident in self.residents])
-        #
-        #     if any(np.isnan(et)):
-        #         print('nan count: {}'.format(np.sum(np.isnan(et))))
-        #
-        #     is_vote = np.random.binomial(n=1, p=et, size=self.N).astype(bool)
-        #     is_vote = (is_vote | self.nom_msks) # candidates always vote
-        #
-        #     self.vote_masks = is_vote
-        #
-        #     resident_opis = resident_opis[is_vote]
-
         # Deterministic voting
         if voting == "deterministic":
             vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
@@ -338,67 +325,3 @@ class District:
             vote = candidate_party[vote] # map candidate to their party
 
         return vote
-
-
-    '''
-    Residents updating their electoral trust (voting probability) based on
-    the difference in their policy preference and that of elected officials
-    (a possible extension is to include diverse update rules) 
-    '''
-    def appraise(self, appraise_target, elected_pool=None):
-
-        # Changed from calculating distance to an average position to calculating average absolute distance
-        if appraise_target != 'close_global':
-            if appraise_target == 'local':
-                elected_pool = self.elected
-
-            # Average position of the representatives
-            elected_positions = np.array([elected.x for elected in elected_pool])
-
-            resident_opis = np.array([resident.x for resident in self.residents])
-
-            # re-scale distance from (0,2) -> (0,1)
-            opi_diffs = np.mean(np.abs(np.subtract.outer(resident_opis, elected_positions)), axis=1) / 2
-            # print(opi_diffs)
-
-            # Electoral trust
-            et = np.array([resident.trust for resident in self.residents])
-
-            # alpha determines the strength of trust update
-            min_alpha = 0.05 # 5% update minimum
-            alpha = np.maximum(0.5 - np.abs(0.5 - et), min_alpha) # degree of change (more extreme trust update less)
-
-            # if preference differs lower than 0.125*2, increase trust and lower trust otherwise
-            change_et = 0.125 - opi_diffs
-
-            new_et = np.maximum(np.minimum(et + (alpha*change_et), 1), 0) # clip values at (0,1)
-
-            for i, resident in enumerate(self.residents):
-                resident.trust = new_et[i]
-
-        else:
-            # Resident compare their opinions to the closest representative (proportional representation)
-
-            # positions of the representatives
-            elected_positions = np.array([elected.x for elected in elected_pool])
-
-            resident_opis = np.array([resident.x for resident in self.residents])
-
-            # re-scale distance from (0,2) -> (0,1)
-            close_opidiffs = np.min(np.abs(np.subtract.outer(resident_opis, elected_positions)), axis=1) / 2
-
-            # Electoral trust
-            et = np.array([resident.trust for resident in self.residents])
-
-            # alpha determines the strength of trust update
-            min_alpha = 0.05  # 5% update minimum
-            alpha = np.maximum(0.5 - np.abs(0.5 - et),
-                               min_alpha)  # degree of change (more extreme trust update less)
-
-            # if preference differs lower than 0.125*2, increase trust and lower trust otherwise
-            change_et = 0.125 - close_opidiffs
-
-            new_et = np.maximum(np.minimum(et + (alpha * change_et), 1), 0)  # clip values at (0,1)
-
-            for i, resident in enumerate(self.residents):
-                resident.trust = new_et[i]

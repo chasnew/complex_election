@@ -11,8 +11,7 @@ class District:
     def __init__(self, d_id, N, party_num = None,
                  nom_rate = 5, rep_num = 1,
                  alpha = 0.5, beta = 0.5,
-                 opinion_distribution = "uniform",
-                 gaussian_mu = 0, gaussian_sd = 0.5):
+                 opinion_dist_dict = {'dist': "uniform", 'low': -1, 'up': 1}):
         """
         Initializes the election model.
 
@@ -31,10 +30,13 @@ class District:
 
         self.d_id = d_id
 
-        if opinion_distribution == "uniform":
-            init_opis = np.random.uniform(-1, 1, size=N)
-        elif opinion_distribution == "gaussian":
+        if opinion_dist_dict['dist'] == "uniform":
+            init_opis = np.random.uniform(opinion_dist_dict['low'],
+                                          opinion_dist_dict['up'], size=N)
+        elif opinion_dist_dict['dist'] == "gaussian":
             lower, upper = -1, 1
+            gaussian_mu = opinion_dist_dict['mu']
+            gaussian_sd = opinion_dist_dict['sd']
             a = (lower - gaussian_mu) / gaussian_sd  # lower sd cutoff
             b = (upper - gaussian_mu) / gaussian_sd  # upper sd cutoff
             init_opis = stats.truncnorm(a, b, loc=gaussian_mu, scale=gaussian_sd).rvs(N)
@@ -227,7 +229,7 @@ class District:
             for i in range(remain_seats):
                 party_rep_nums[top_remain_parties[i]] += 1
 
-            print('Seats allocation: {}'.format(party_rep_nums))
+            # print('Seats allocation: {}'.format(party_rep_nums))
 
             self.elected = []
             self.elected_party = []
@@ -301,8 +303,8 @@ class District:
 
         poll_props = np.array([sincere_vote_count[i] / sincere_vote.shape[0]
                                for i in range(party_num)])
-        print('poll proportion: ', poll_props)
-        print('history record: ', self.prev_vote_props)
+        # print('poll proportion: ', poll_props)
+        # print('history record: ', self.prev_vote_props)
 
         # propensity to not waste vote
         weighted_vote_props = (self.alpha * self.prev_vote_props) + ((1 - self.alpha) * poll_props)

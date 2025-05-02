@@ -2,7 +2,7 @@ from district import District
 from party import Party
 import numpy as np
 from scipy.spatial import distance
-import multiprocessing as mp
+import random
 
 class Election:
     """
@@ -10,11 +10,10 @@ class Election:
     """
 
     def __init__(self, N, nom_rate = 5, rep_num = 1,
-                 party_num = None, party_sd = 0.2, polarization = True,
+                 party_num = None, party_sd = 0.2, party_loc = 'polarized',
                  district_num = 1, voting='deterministic',
-                 opinion_distribution = "uniform",
-                 gaussian_mu = 0, gaussian_sd = 0.5,
-                 efeedback = False):
+                 opinion_dist_dict = {'dist': "uniform", 'low': -1, 'up': 1},
+                 ideo_sort = 0, strategic = False, alpha = 0.5, beta = 0.5):
         """
         Initializes the election model.
 
@@ -25,16 +24,21 @@ class Election:
         rep_num: number of representatives
         party_num: number of parties
         party_sd: inclusiveness of parties determining the width of gaussian filter for each party
+        party_loc: determine how the positions of parties are assigned
         district_num: number of district
         voting: voting scenario including "deterministic", "probabilistic", "one_per_party", "proportional_rep"
-        opinion_distribution: distribution of opinions of the district residents
-        gaussian_mu: mean of the gaussian distribution of opinions
-        gaussian_sd: standard deviation of the gaussian distribution of opinions
-        efeedback: whether electoral feedback is activated allowing residents to update their electoral trust
+        opinion_dist_dict: distribution of opinions of the district residents
+        ideo_sort: the degree of ideological geographic sorting across multiple districts
+        strategic: whether residents vote strategically based on past outcome and polling results
+        alpha: history bias
+        beta: strategic tendency
         """
         self.voting = voting
-        self.opinion_distribution = opinion_distribution
-        self.efeedback = efeedback
+        self.opinion_dist_dict = opinion_dist_dict
+        self.strategic = strategic
+        self.alpha = alpha
+        self.beta = beta
+        self.ideo_sort = ideo_sort
 
         self.districts = []
         Nd = int(np.round(N / district_num)) # number of residents per district
@@ -44,24 +48,68 @@ class Election:
             nom_rate = rep_num + 1
 
         meta_residents = []
-        for i in range(district_num):
-            district = District(i, Nd, nom_rate, rep_num,
-                                opinion_distribution,
-                                gaussian_mu, gaussian_sd)
+        if district_num > 1:
+            if opinion_dist_dict['dist'] == 'uniform':
+                gap_size = 2 / district_num  # preference space absolute length = 2
+                start = -1000 # scaled up by 1000 to calculate as integer
+                stop = 1000
+                jump = int(gap_size * 1000)
+
+                # district ideological bound for uniform distribution
+                opinion_dist_list = [{'dist': 'uniform', 'low': low / 1000,'up': (low + jump) / 1000}
+                                     for low in range(start, stop, jump)]
+            elif opinion_dist_dict['dist'] == 'gaussian':
+                gap_size = 2 / district_num  # preference space absolute length = 2
+                start = int((-1 + (gap_size / 2)) * 1000)  # scaled up by 1000 to calculate as integer
+                stop = 1000
+                jump = int(gap_size * 1000)
+                gaus_sd = opinion_dist_dict['sd']
+
+                # district positions evenly spaced out
+                opinion_dist_list = [{'dist': 'gaussian', 'mu': pos / 1000, 'sd': gaus_sd / np.sqrt(district_num)}
+                                     for pos in range(start, stop, jump)]
+
+            for i in range(district_num):
+                district = District(i, Nd, party_num, nom_rate,
+                                    rep_num, alpha, beta,
+                                    opinion_dist_list[i])
+                self.districts.append(district)
+
+                # meta_residents.append(district.residents)
+                # meta_residents = np.concatenate(meta_residents)
+
+            # ideological sorting
+            if ideo_sort < 1:
+                movers = []
+
+                # sample a proportion of residents inversely proportional to ideo_sort
+                for i in range(district_num):
+                    mover_num = int(district.N * (1 - ideo_sort))
+                    movers.extend(np.random.choice(self.districts[i].residents,
+                                                   size=mover_num, replace=False))
+
+                # shuffling preferences of "movers" and reassign their preference
+                mover_prefs = [mover.x for mover in movers]
+                random.shuffle(mover_prefs)
+                for i, mover in enumerate(movers):
+                    mover.x = mover_prefs[i]
+        else:
+            district = District(0, Nd, party_num, nom_rate,
+                                rep_num, alpha, beta,
+                                opinion_dist_dict)
             self.districts.append(district)
-
-            meta_residents.append(district.residents)
-
-        meta_residents = np.concatenate(meta_residents)
 
         if (party_num != None) and (party_num > 0):
             # creating parties based on residents' values and parties try to be distinct
-            if polarization:
+            if party_loc == 'polarized':
                 gap_size = 2 / party_num # preference space absolute length = 2
                 start = int((-1 + gap_size/2)*1000)
                 stop = 1000
                 jump = int(gap_size*1000)
                 party_pos = [pos / 1000 for pos in range(start, stop, jump)] # party positions evenly spaced out
+            elif isinstance(party_loc, list):
+                # party positions are manually picked
+                party_pos = party_loc
             else:
                 # creating parties randomly
                 party_pos = np.random.uniform(-1, 1, size=party_num)
@@ -84,7 +132,7 @@ class Election:
                                'rep_num': lambda m: m.districts[0].rep_num,
                                'voting': lambda m: m.voting,
                                'distribution': lambda m: m.opinion_distribution,
-                               'efeedback': lambda m: m.efeedback,
+                               'strategic': lambda m: m.strategic,
                                'js_distance': lambda m: m.position_dissimilarity(),
                                'avg_close_elected': lambda m: m.agg_mean_close_distance()}
 
@@ -92,7 +140,7 @@ class Election:
                               'district_num': lambda m: len(m.districts),
                               'rep_num': lambda m: m.districts[0].rep_num,
                               'voting': lambda m: m.voting,
-                              'avg_trust': lambda m: m.mean_trust(),
+                              'vote_prop': lambda m: m.party_vote_prop(),
                               'avg_close_elected': lambda m: m.mean_close_distance()}
 
     def mean_close_distance(self):
@@ -150,6 +198,21 @@ class Election:
 
         return distance.jensenshannon(res_hists, elect_hists)
 
+    def party_vote_prop(self):
+        '''
+        Reporting vote proportion that each party receives in a specific electoral cycle
+        :return: Vote proportion each party receives in an array
+        '''
+        tmp_list = []
+
+        for district in self.districts:
+            prev_votes = district.prev_vote_props
+            tmp_list.append(prev_votes)
+
+        mean_vote_props = np.mean(tmp_list, axis=0)
+
+        return mean_vote_props
+
     def agg_mean_close_distance(self):
         '''
         Calculate the average distance to closest accumulated elected candidates from every district
@@ -182,6 +245,13 @@ class Election:
             for ind, resident in enumerate(d_residents):
                 resident.party_aff = aff[ind]
 
+    def form_new_party(self, party_pos):
+        # adding a new party
+        self.parties.append(Party(len(self.parties), party_pos, self.party_sd))
+
+        for district in self.districts:
+            district.prev_vote_props = np.append(district.prev_vote_props, 0)
+
     def step(self):
 
         # reset candidate pools for the new election cycle
@@ -191,7 +261,7 @@ class Election:
         for district in self.districts:
             district.nominate(self.parties)
             district.vote(voting=self.voting, parties=self.parties,
-                          trust_based=self.efeedback)
+                          strategic=self.strategic)
 
             # current elected representative pool
             self.elected_pool.extend(district.elected)
@@ -204,27 +274,19 @@ class Election:
             self.cum_elected_party_pool.extend(self.elected_party_pool)
 
         # electoral feedback updating residents' electoral trust
-        if self.efeedback:
-            if (self.voting == 'deterministic') or (self.voting == 'probabilistic'):
-                appraise_target = 'global'
-                for district in self.districts:
-                    district.appraise(appraise_target, self.elected_pool)
-            elif (self.voting == 'one_per_party'):
-                appraise_target = 'local'
-                for district in self.districts:
-                    district.appraise(appraise_target, None)
-            elif (self.voting == 'proportional_rep'):
-                appraise_target = 'party'
-                party_elected_list = []
-                for i in range(len(self.parties)):
-                    tmp_elected = [candidate for candidate in self.elected_pool if candidate.party_id == i]
-                    party_elected_list.append(tmp_elected)
-
-                for district in self.districts:
-                    district.appraise(appraise_target, party_elected_list)
-
-
-
+        # if self.efeedback:
+        #     if (self.voting == 'deterministic') or (self.voting == 'probabilistic'):
+        #         appraise_target = 'global'
+        #         for district in self.districts:
+        #             district.appraise(appraise_target, self.elected_pool)
+        #     elif (self.voting == 'one_per_party'):
+        #         appraise_target = 'local'
+        #         for district in self.districts:
+        #             district.appraise(appraise_target, None)
+        #     elif (self.voting == 'proportional_rep'):
+        #         appraise_target = 'close_global'
+        #         for district in self.districts:
+        #             district.appraise(appraise_target, self.elected_pool)
 
         # reset candidates after an election
         for party in self.parties:
@@ -248,4 +310,11 @@ class Election:
         """
         Text representation of the model.
         """
-        return f'Population (districts: {len(self.districts)}| party: {len(self.parties)})'
+        # f'population {variable}' alternative format
+        return 'Population (districts: {}| party: {}| electoral system: {}|\
+         strategic: {}| history-bias: {}| strategic tendency: {})'.format(len(self.districts),
+                                                                          len(self.parties),
+                                                                          self.voting,
+                                                                          self.strategic,
+                                                                          self.alpha,
+                                                                          self.beta)

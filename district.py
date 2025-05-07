@@ -48,7 +48,7 @@ class District:
         self.alpha = alpha
         self.beta = beta
 
-        self.nom_msks = []
+        self.loc_candidates = []
         self.elected = []
         self.elected_party = []
         self.cum_elected = []
@@ -65,6 +65,7 @@ class District:
             party_opis = [party.x for party in parties]
             party_sd = parties[0].sd
 
+
             tmp_opis = np.array([resident.x for resident in self.residents])
             diff = np.abs(np.subtract.outer(party_opis, tmp_opis)) # differences in preferences
 
@@ -76,28 +77,26 @@ class District:
 
             # party member list is extended with local candidates
             for party in parties:
-                avail_inds = np.arange(self.N)[~self.nom_msks] # filter out already recruited residents
 
-                avail_gaussian = gaussian_filter[party.id][avail_inds]
-                nom_party_probs = avail_gaussian / np.sum(avail_gaussian)
-                nom_party_inds = np.random.choice(avail_inds, size=self.nom_rate,
-                                                  replace=False, p=nom_party_probs)
-                district_candidates = [Candidate(resident.id, self.d_id, resident.x, party.id)
-                                       for resident in self.residents[nom_party_inds]]
+                pcandidate_pos = np.random.normal(loc=party.x, scale=party_sd, size=self.nom_rate)
+                district_candidates = [Candidate(i, self.d_id, candidate_pos, party.id)
+                                       for i, candidate_pos in enumerate(pcandidate_pos)]
                 party.members.extend(district_candidates)
 
-                self.nom_msks[nom_party_inds] = True
+                self.loc_candidates.extend(district_candidates)
+                # self.nom_msks[nom_party_inds] = True
 
         else:
             nom_inds = np.random.choice(np.arange(self.N), size=self.nom_rate, replace=False)
-            self.nom_msks = np.zeros(self.N).astype(bool)
-            self.nom_msks[nom_inds] = True
+            district_candidates = [Candidate(resident.id, self.d_id, resident.x, None)
+                                   for resident in self.residents[nom_inds]]
+            self.loc_candidates.extend(district_candidates)
 
 
     def vote(self, voting="deterministic", parties=[],
              strategic=False, party_filter=False):
 
-        candidates = self.residents[self.nom_msks]
+        candidates = self.loc_candidates # self.residents[self.nom_msks]
         candidate_opis = np.array([candidate.x for candidate in candidates])
 
         # every resident votes
@@ -134,8 +133,8 @@ class District:
                 pid = parties[i].id
 
                 # local party candidates in the district
-                pd_candidates = np.array([candidate for candidate in parties[pid].members
-                                          if candidate.d_id == self.d_id])
+                pd_candidates = np.array([candidate for candidate in self.loc_candidates
+                                          if candidate.party_id == pid])
                 if party_filter:
                     party_candidate_opis = np.array([candidate.x for candidate in pd_candidates])
 
@@ -178,12 +177,7 @@ class District:
         # All candidates are on the ballots but share winnability of the party
         else:
             # all local party candidates (iterate over each party)
-            district_candidates = []
-            for pid in range(len(parties)):
-                p_candidates = np.array([candidate for candidate in parties[pid].members
-                                         if candidate.d_id == self.d_id])
-
-                district_candidates.extend(p_candidates)
+            district_candidates = self.loc_candidates
 
             # Strategic voting
             if len(parties) > 2 and strategic:

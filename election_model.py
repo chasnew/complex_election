@@ -2,6 +2,7 @@ from district import District
 from party import Party
 import numpy as np
 from scipy.spatial import distance
+from collections import Counter
 import random
 
 class Election:
@@ -75,9 +76,6 @@ class Election:
                                     opinion_dist_list[i])
                 self.districts.append(district)
 
-                # meta_residents.append(district.residents)
-                # meta_residents = np.concatenate(meta_residents)
-
             # ideological sorting
             if ideo_sort < 1:
                 movers = []
@@ -132,7 +130,6 @@ class Election:
                                'rep_num': lambda m: m.districts[0].rep_num,
                                'voting': lambda m: m.voting,
                                'distribution': lambda m: m.opinion_distribution,
-                               'strategic': lambda m: m.strategic,
                                'js_distance': lambda m: m.position_dissimilarity(),
                                'avg_close_elected': lambda m: m.agg_mean_close_distance()}
 
@@ -141,6 +138,7 @@ class Election:
                               'rep_num': lambda m: m.districts[0].rep_num,
                               'voting': lambda m: m.voting,
                               'vote_prop': lambda m: m.party_vote_prop(),
+                              'seat_prop': lambda m: m.party_seat_prop(),
                               'avg_close_elected': lambda m: m.mean_close_distance()}
 
     def mean_close_distance(self):
@@ -176,7 +174,7 @@ class Election:
 
         return np.mean(resident_trusts)
 
-    def position_dissimilarity(self):
+    def position_dissimilarity(self, start=0, end=100):
         '''
         Calculate Jensen-Shannon divergence between residents' opinions and elected officials positions
         :return: Distributional distance
@@ -212,6 +210,23 @@ class Election:
         mean_vote_props = np.mean(tmp_list, axis=0)
 
         return mean_vote_props
+
+    def party_seat_prop(self):
+        '''
+        Reporting seat proportion that each party wins in a specific electoral cycle
+        :return: Seat proportion each party wins in an array
+        '''
+        tmp_list = []
+
+        for district in self.districts:
+            elected_parties = district.elected_party
+            tmp_list.extend(elected_parties)
+
+        seat_counter = Counter(tmp_list)
+        seat_props = np.array([seat_counter[p_id] for p_id in range(len(seat_counter))])
+        seat_props = seat_props / seat_props.sum()
+
+        return seat_props
 
     def agg_mean_close_distance(self):
         '''
@@ -311,10 +326,6 @@ class Election:
         Text representation of the model.
         """
         # f'population {variable}' alternative format
-        return 'Population (districts: {}| party: {}| electoral system: {}|\
-         strategic: {}| history-bias: {}| strategic tendency: {})'.format(len(self.districts),
-                                                                          len(self.parties),
-                                                                          self.voting,
-                                                                          self.strategic,
-                                                                          self.alpha,
-                                                                          self.beta)
+        return 'Population (districts: {}| party: {}| electoral system: {}|' +\
+         'history-bias: {}| strategic tendency: {})'.format(len(self.districts), len(self.parties),
+                                                            self.voting, self.alpha, self.beta)

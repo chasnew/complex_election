@@ -62,18 +62,8 @@ class District:
 
     def nominate(self, parties=[]):
         if (len(parties) > 0):
-            party_opis = [party.x for party in parties]
+            self.loc_candidates = []
             party_sd = parties[0].sd
-
-
-            tmp_opis = np.array([resident.x for resident in self.residents])
-            diff = np.abs(np.subtract.outer(party_opis, tmp_opis)) # differences in preferences
-
-            # gaussian filter of party selection
-            diff_square = np.square(diff)
-            gaussian_filter = np.exp((-diff_square)/(2*np.square(party_sd)))
-
-            self.nom_msks = np.zeros(self.N).astype(bool)
 
             # party member list is extended with local candidates
             for party in parties:
@@ -84,7 +74,6 @@ class District:
                 party.members.extend(district_candidates)
 
                 self.loc_candidates.extend(district_candidates)
-                # self.nom_msks[nom_party_inds] = True
 
         else:
             nom_inds = np.random.choice(np.arange(self.N), size=self.nom_rate, replace=False)

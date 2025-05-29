@@ -22,7 +22,8 @@ class District:
         party_num: number of political parties
         nom_rate: fixed number of nominated candidates (per party if parties exist)
         rep_num: number of representatives
-        alpha: memory bias when evaluating winning probability of each party
+        alpha: strategic tendency of residents indicating how much they weigh winnability over alignment
+        beta: memory bias when evaluating winning probability of each party
         opinion_distribution: distribution of opinions of the district residents
         gaussian_mu: mean of the gaussian distribution of opinions
         gaussian_sd: standard deviation of the gaussian distribution of opinions
@@ -56,8 +57,8 @@ class District:
 
         self.vote_masks = []
 
-        # vote proportion of each party in previous election cycle (initially 0 for all)
-        self.prev_vote_props = np.zeros(party_num)
+        # vote proportion of each party in previous election cycle (initially assume equal split)
+        self.prev_vote_props = np.ones(party_num)/party_num
 
 
     def nominate(self, parties=[]):
@@ -83,7 +84,7 @@ class District:
 
 
     def vote(self, voting="deterministic", parties=[],
-             strategic=False, party_filter=False):
+             party_filter=False):
 
         candidates = self.loc_candidates # self.residents[self.nom_msks]
         candidate_opis = np.array([candidate.x for candidate in candidates])
@@ -139,13 +140,7 @@ class District:
             candidates = np.array(candidates)
 
             # Strategic voting
-            if len(parties) > 2 and strategic:
-                vote = self.strategic_vote(resident_opis, candidates, parties)
-
-            # Naive voting
-            else:
-                # residents vote for the closest candidate
-                vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
+            vote = self.strategic_vote(resident_opis, candidates, parties)
 
             vote_counter = Counter(vote)
             self.prev_vote_props = np.array([vote_counter[i] / vote.shape[0] for i in range(len(parties))])
@@ -168,33 +163,23 @@ class District:
             # all local party candidates (iterate over each party)
             district_candidates = self.loc_candidates
 
-            # Strategic voting
-            if len(parties) > 2 and strategic:
-                # may need an argument for proportional_rep since number of parties doesn't match candidates
-                vote = self.strategic_vote(resident_opis, district_candidates, parties)
-
-            # Naive voting
-            else:
-                # residents vote for the closest candidate
-                candidate_opis = [candidate.x for candidate in district_candidates]
-                vote = np.argmin(np.abs(np.subtract.outer(resident_opis, candidate_opis)), axis=1)
-
-                # map candidate id to party id
-                cand_party_map = {i: [] for i in range(len(parties))}
-                for cid, candidate in enumerate(district_candidates):
-                    c_party = candidate.party_id
-                    cand_party_map[c_party].append(cid)
-
-                for i in range(len(parties)):
-                    vote[np.isin(vote, cand_party_map[i])] = i
+            # Strategic voting (adjusted by alpha parameter)
+            vote = self.strategic_vote(resident_opis, district_candidates, parties)
 
             vote_counter = Counter(vote)
             self.prev_vote_props = np.array([vote_counter[i] / vote.shape[0] for i in range(len(parties))])
+
+            # fill in vote count for parties with 0 vote for seat calculation
+            if len(vote_counter) < len(parties):
+                for pid in range(len(parties)):
+                    if pid not in vote_counter:
+                        vote_counter[pid] = 0
 
             # Calculate seats for each party (Hamilton's method)
             # Previously d'Hondt method
             party_rep_nums = {}
             remainders = [0 for _ in range(len(vote_counter))]
+            # print(vote_counter)
 
             total_vote = sum(vote_counter.values())
             hare_quota = total_vote / self.rep_num
@@ -290,7 +275,7 @@ class District:
         # print('history record: ', self.prev_vote_props)
 
         # propensity to not waste vote
-        weighted_vote_props = (self.alpha * self.prev_vote_props) + ((1 - self.alpha) * poll_props)
+        weighted_vote_props = (self.beta * self.prev_vote_props) + ((1 - self.beta) * poll_props)
         # print('district {}, weighted vote props:'.format(self.d_id), weighted_vote_props)
 
         # (1 / (number of seats + 1)) droop quota -> winning probability
@@ -304,7 +289,7 @@ class District:
         if len(candidates) > party_num:
             win_probs = win_probs[candidate_party]
 
-        vote = np.argmax(((1 - self.beta) * rescaled_dists) + (self.beta * win_probs), axis=1)
+        vote = np.argmax(((1 - self.alpha) * rescaled_dists) + (self.alpha * win_probs), axis=1)
 
         if len(candidates) > party_num:
             vote = candidate_party[vote] # map candidate to their party

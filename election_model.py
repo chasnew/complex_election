@@ -14,7 +14,7 @@ class Election:
                  party_num = None, party_sd = 0.2, party_loc = 'polarized',
                  district_num = 1, voting='deterministic',
                  opinion_dist_dict = {'dist': "uniform", 'low': -1, 'up': 1},
-                 ideo_sort = 0, strategic = False, alpha = 0.5, beta = 0.5):
+                 ideo_sort = 0, alpha = 0.5, beta = 0.5):
         """
         Initializes the election model.
 
@@ -36,7 +36,6 @@ class Election:
         """
         self.voting = voting
         self.opinion_dist_dict = opinion_dist_dict
-        self.strategic = strategic
         self.alpha = alpha
         self.beta = beta
         self.ideo_sort = ideo_sort
@@ -223,7 +222,7 @@ class Election:
             tmp_list.extend(elected_parties)
 
         seat_counter = Counter(tmp_list)
-        seat_props = np.array([seat_counter[p_id] for p_id in range(len(seat_counter))])
+        seat_props = np.array([seat_counter[p_id] for p_id in range(len((self.parties)))])
         seat_props = seat_props / seat_props.sum()
 
         return seat_props
@@ -275,8 +274,7 @@ class Election:
 
         for district in self.districts:
             district.nominate(self.parties)
-            district.vote(voting=self.voting, parties=self.parties,
-                          strategic=self.strategic)
+            district.vote(voting=self.voting, parties=self.parties)
 
             # current elected representative pool
             self.elected_pool.extend(district.elected)
@@ -326,6 +324,5 @@ class Election:
         Text representation of the model.
         """
         # f'population {variable}' alternative format
-        return 'Population (districts: {}| party: {}| electoral system: {}|' +\
-         'history-bias: {}| strategic tendency: {})'.format(len(self.districts), len(self.parties),
-                                                            self.voting, self.alpha, self.beta)
+        return 'Population (districts: {}| party: {}| '.format(len(self.districts), len(self.parties)) +\
+         'electoral system: {}| history-bias: {}| strategic tendency: {})'.format(self.voting, self.beta, self.alpha)

@@ -66,16 +66,23 @@ class District:
             self.loc_candidates = []
             party_sd = parties[0].sd
 
-            # party member list is extended with local candidates
+            # party member list is ext
+            # ended with local candidates
             for party in parties:
+                # draw candidates from truncated normal distribution
+                lower, upper = -1, 1
+                a = (lower - party.x) / party_sd  # lower sd cutoff
+                b = (upper - party.x) / party_sd  # upper sd cutoff
+                pcandidate_pos = stats.truncnorm(a, b, loc=party.x, scale=party_sd).rvs(self.nom_rate)
+                # pcandidate_pos = np.random.normal(loc=party.x, scale=party_sd, size=self.nom_rate)
 
-                pcandidate_pos = np.random.normal(loc=party.x, scale=party_sd, size=self.nom_rate)
                 district_candidates = [Candidate(i, self.d_id, candidate_pos, party.id)
                                        for i, candidate_pos in enumerate(pcandidate_pos)]
                 party.members.extend(district_candidates)
 
                 self.loc_candidates.extend(district_candidates)
 
+        # need to fix this to draw candidates independently (but not currently used)
         else:
             nom_inds = np.random.choice(np.arange(self.N), size=self.nom_rate, replace=False)
             district_candidates = [Candidate(resident.id, self.d_id, resident.x, None)

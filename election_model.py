@@ -12,9 +12,9 @@ class Election:
 
     def __init__(self, N, nom_rate = 5, rep_num = 1,
                  party_num = None, party_sd = 0.2, party_loc = 'polarized',
-                 district_num = 1, voting='deterministic',
+                 district_num = 1, elect_system='one_per_party', voting='deterministic',
                  opinion_dist_dict = {'dist': "uniform", 'low': -1, 'up': 1},
-                 ideo_sort = 0, alpha = 0.5, beta = 0.5):
+                 ideo_sort = 0, alpha = 0.5, beta = 0.5, s=0.05):
         """
         Initializes the election model.
 
@@ -27,17 +27,21 @@ class Election:
         party_sd: inclusiveness of parties determining the width of gaussian filter for each party
         party_loc: determine how the positions of parties are assigned
         district_num: number of district
-        voting: voting scenario including "deterministic", "probabilistic", "one_per_party", "proportional_rep"
+        elect_system: electoral system including "one_per_party" (First-Past-The-Post) and "proportional_rep"
+        voting: voting type including "deterministic" and "probabilistic"
         opinion_dist_dict: distribution of opinions of the district residents
         ideo_sort: the degree of ideological geographic sorting across multiple districts
         strategic: whether residents vote strategically based on past outcome and polling results
         alpha: history bias
         beta: strategic tendency
+        s: probability that a resident will vote sincerely regardless (sincere probability)
         """
+        self.elect_system = elect_system
         self.voting = voting
         self.opinion_dist_dict = opinion_dist_dict
         self.alpha = alpha
         self.beta = beta
+        self.s = s
         self.ideo_sort = ideo_sort
 
         self.districts = []
@@ -71,7 +75,7 @@ class Election:
 
             for i in range(district_num):
                 district = District(i, Nd, party_num, nom_rate,
-                                    rep_num, alpha, beta,
+                                    rep_num, alpha, beta, s,
                                     opinion_dist_list[i])
                 self.districts.append(district)
 
@@ -92,7 +96,7 @@ class Election:
                     mover.x = mover_prefs[i]
         else:
             district = District(0, Nd, party_num, nom_rate,
-                                rep_num, alpha, beta,
+                                rep_num, alpha, beta, s,
                                 opinion_dist_dict)
             self.districts.append(district)
 
@@ -127,6 +131,7 @@ class Election:
         self.model_reporter = {'party_num': lambda m: len(m.parties),
                                'district_num': lambda m: len(m.districts),
                                'rep_num': lambda m: m.districts[0].rep_num,
+                               'elect_system': lambda m: m.elect_system,
                                'voting': lambda m: m.voting,
                                'distribution': lambda m: m.opinion_distribution,
                                'js_distance': lambda m: m.position_dissimilarity(),
@@ -135,6 +140,7 @@ class Election:
         self.step_reporter = {'party_num': lambda m: len(m.parties),
                               'district_num': lambda m: len(m.districts),
                               'rep_num': lambda m: m.districts[0].rep_num,
+                              'elect_system': lambda m: m.elect_system,
                               'voting': lambda m: m.voting,
                               'vote_prop': lambda m: m.party_vote_prop(),
                               'seat_prop': lambda m: m.party_seat_prop(),
@@ -274,7 +280,7 @@ class Election:
 
         for district in self.districts:
             district.nominate(self.parties)
-            district.vote(voting=self.voting, parties=self.parties)
+            district.vote(elect_system=self.elect_system, voting=self.voting, parties=self.parties)
 
             # current elected representative pool
             self.elected_pool.extend(district.elected)
@@ -285,21 +291,6 @@ class Election:
         self.cum_elected_pool.extend(self.elected_pool)
         if len(self.parties) > 0:
             self.cum_elected_party_pool.extend(self.elected_party_pool)
-
-        # electoral feedback updating residents' electoral trust
-        # if self.efeedback:
-        #     if (self.voting == 'deterministic') or (self.voting == 'probabilistic'):
-        #         appraise_target = 'global'
-        #         for district in self.districts:
-        #             district.appraise(appraise_target, self.elected_pool)
-        #     elif (self.voting == 'one_per_party'):
-        #         appraise_target = 'local'
-        #         for district in self.districts:
-        #             district.appraise(appraise_target, None)
-        #     elif (self.voting == 'proportional_rep'):
-        #         appraise_target = 'close_global'
-        #         for district in self.districts:
-        #             district.appraise(appraise_target, self.elected_pool)
 
         # reset candidates after an election
         for party in self.parties:
@@ -325,4 +316,4 @@ class Election:
         """
         # f'population {variable}' alternative format
         return 'Population (districts: {}| party: {}| '.format(len(self.districts), len(self.parties)) +\
-         'electoral system: {}| history-bias: {}| strategic tendency: {})'.format(self.voting, self.beta, self.alpha)
+         'electoral system: {}| history-bias: {}| strategic tendency: {})'.format(self.elect_system, self.beta, self.alpha)

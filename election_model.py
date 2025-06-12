@@ -14,7 +14,7 @@ class Election:
                  party_num = None, party_sd = 0.2, party_loc = 'polarized',
                  district_num = 1, elect_system='one_per_party', voting='deterministic',
                  opinion_dist_dict = {'dist': "uniform", 'low': -1, 'up': 1},
-                 ideo_sort = 0, alpha = 0.5, beta = 0.5, s=0.05):
+                 ideo_sort = 0, alpha = 0.5, beta = 0.5, ps=0.05):
         """
         Initializes the election model.
 
@@ -34,14 +34,14 @@ class Election:
         strategic: whether residents vote strategically based on past outcome and polling results
         alpha: history bias
         beta: strategic tendency
-        s: probability that a resident will vote sincerely regardless (sincere probability)
+        ps: polling sample size (in proportion of the population size)
         """
         self.elect_system = elect_system
         self.voting = voting
         self.opinion_dist_dict = opinion_dist_dict
         self.alpha = alpha
         self.beta = beta
-        self.s = s
+        self.ps = ps
         self.ideo_sort = ideo_sort
 
         self.districts = []
@@ -75,7 +75,7 @@ class Election:
 
             for i in range(district_num):
                 district = District(i, Nd, party_num, nom_rate,
-                                    rep_num, alpha, beta, s,
+                                    rep_num, alpha, beta, ps,
                                     opinion_dist_list[i])
                 self.districts.append(district)
 
@@ -96,7 +96,7 @@ class Election:
                     mover.x = mover_prefs[i]
         else:
             district = District(0, Nd, party_num, nom_rate,
-                                rep_num, alpha, beta, s,
+                                rep_num, alpha, beta, ps,
                                 opinion_dist_dict)
             self.districts.append(district)
 

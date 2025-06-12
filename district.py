@@ -10,7 +10,7 @@ class District:
 
     def __init__(self, d_id, N, party_num = None,
                  nom_rate = 5, rep_num = 1,
-                 alpha = 0.5, beta = 0.5, s=0.05,
+                 alpha = 0.5, beta = 0.5, ps=0.1,
                  opinion_dist_dict = {'dist': "uniform", 'low': -1, 'up': 1}):
         """
         Initializes the election model.
@@ -24,7 +24,7 @@ class District:
         rep_num: number of representatives
         alpha: strategic tendency of residents indicating how much they weigh winnability over alignment
         beta: memory bias when evaluating winning probability of each party
-        s: probability that a resident will vote sincerely regardless (sincere probability)
+        ps: probability that a resident will vote sincerely regardless (sincere probability)
         opinion_distribution: distribution of opinions of the district residents
         gaussian_mu: mean of the gaussian distribution of opinions
         gaussian_sd: standard deviation of the gaussian distribution of opinions
@@ -49,7 +49,7 @@ class District:
         self.rep_num = rep_num
         self.alpha = alpha
         self.beta = beta
-        self.s = s
+        self.ps = ps
 
         self.loc_candidates = []
         self.elected = []
@@ -125,7 +125,7 @@ class District:
             candidates = np.array(candidates)
 
             # Strategic voting
-            vote = self.strategic_vote(resident_opis, candidates, parties, self.s, voting)
+            vote = self.strategic_vote(resident_opis, candidates, parties, self.ps, voting)
 
             vote_counter = Counter(vote)
             self.prev_vote_props = np.array([vote_counter[i] / vote.shape[0] for i in range(len(parties))])
@@ -149,7 +149,7 @@ class District:
             candidates = self.loc_candidates
 
             # Strategic voting (adjusted by alpha parameter)
-            vote = self.strategic_vote(resident_opis, candidates, parties, self.s, voting)
+            vote = self.strategic_vote(resident_opis, candidates, parties, self.ps, voting)
 
             vote_counter = Counter(vote)
             self.prev_vote_props = np.array([vote_counter[i] / vote.shape[0] for i in range(len(parties))])
@@ -224,7 +224,9 @@ class District:
     '''
     Strategic voting results based on previous election results as well as polling
     '''
-    def strategic_vote(self, resident_opis, candidates, parties, s=0.05, voting='deterministic'):
+    def strategic_vote(self, resident_opis, candidates, parties, ps=0.1, voting='deterministic'):
+
+        party_num = len(parties)
 
         candidate_opis = []
         candidate_party = []
@@ -245,16 +247,22 @@ class District:
 
         # reverse and re-scale distance from (0,2) -> (1,0)
         rescaled_dists = 1 - (dists / 2)
+        # align_noise = np.random.normal(loc=0, scale=0.2, size=(resident_opis.shape[0], party_num))
+        # rescaled_dists = np.clip(rescaled_dists + align_noise, a_min=0, a_max=1)
 
         # winnability calculation
-        party_num = len(parties)
-
-        # ideal polling
+        # polling
+        poll_n = int(ps*resident_opis.shape[0])
         sincere_vote = np.argmin(dists, axis=1)
         sincere_party_vote = candidate_party[sincere_vote] # map candidate to their party
-        sincere_vote_count = Counter(sincere_party_vote)
+        poll_samples = np.random.choice(sincere_party_vote, size=poll_n, replace=False)
+        sincere_vote_count = Counter(poll_samples)
 
-        poll_props = np.array([sincere_vote_count[i] / sincere_party_vote.shape[0]
+        # extra polling noise for funsies (not used currently)
+        # random_poll = np.random.multinomial(poll_n, [1 / party_num] * party_num, size=1)
+        # poll_noise = (random_poll / poll_n) - (1 / party_num)
+
+        poll_props = np.array([sincere_vote_count[i] / poll_n
                                for i in range(party_num)])
         # print('poll proportion: ', poll_props)
         # print('history record: ', self.prev_vote_props)
@@ -275,9 +283,10 @@ class District:
             win_probs = win_probs[candidate_party]
 
         vote_scores = ((1 - self.alpha) * rescaled_dists) + (self.alpha * win_probs)
+        # print('viability:', win_probs)
 
         # sincere voters drawn from binomial distribution
-        sincere_masks = np.random.binomial(n=1, p=s, size=rescaled_dists.shape[0]).astype(bool)
+        # sincere_masks = np.random.binomial(n=1, p=s, size=rescaled_dists.shape[0]).astype(bool)
 
         if voting == 'deterministic':
             vote = np.argmax(vote_scores, axis=1)
@@ -289,7 +298,10 @@ class District:
             vote = (elect_cumprobs < tmp_randnums[:, None]).sum(axis=1)
 
         # replace strategic votes with sincere votes
-        vote[sincere_masks] = sincere_vote[sincere_masks]
+        # vote[sincere_masks] = sincere_vote[sincere_masks]
+
+        # replace strategic votes with random votes
+        # vote[sincere_masks] = np.random.randint(party_num, size=np.sum(sincere_masks))
 
         if len(candidates) > party_num:
             vote = candidate_party[vote] # map candidate to their party

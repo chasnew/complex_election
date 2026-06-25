@@ -8,7 +8,7 @@ from election_model import Election
 
 
 def simulate_election(params, model_keys, sim_type='when_pemerge',
-                      new_party=None, delta=0.05, n_iter=5000,
+                      new_party=None, delta=0.05, move_period=50, n_iter=5000,
                       print_interval=None, model_report=True, step_report=False):
     np.random.seed()
 
@@ -26,7 +26,12 @@ def simulate_election(params, model_keys, sim_type='when_pemerge',
 
         # in radicalization scenario, stop simulations when the party move beyond the bounds
         if (sim_type == 'radicalization') or (sim_type == 'vote_capture'):
-            if (mov_party.x < -1) or (mov_party.x > 0):
+            if (i == 0) and (move_period < 5):
+                # warm-up steps
+                for j in range(4):
+                    election_model.step()
+
+            if (mov_party.x < 0) or (mov_party.x > 1):
                 break
 
         election_model.step()
@@ -38,19 +43,32 @@ def simulate_election(params, model_keys, sim_type='when_pemerge',
             step_data.append(step_dict)
 
         # new party attempts to join election (party emergence scenarios)
-        if (sim_type == 'when_pemerge') or (sim_type == 'fptp_sort'):
-            if (new_party is not None) and (i == int(n_iter/3)):
+        if (sim_type == 'when_pemerge') or (sim_type == 'geo_sort'):
+            if (new_party is not None) and (i == 5):
                 election_model.form_new_party(party_pos=new_party)
 
         # party moves (party radicalization and vote capture scenarios)
         elif sim_type == 'radicalization':
-            if ((i+1) % 50 == 0):
-                mov_party = election_model.parties[0]
-                mov_party.x = np.round(mov_party.x - delta, decimals=2)
-        elif sim_type == 'vote_capture':
-            if ((i+1) % 50 == 0):
+            if ((i+1) % move_period == 0):
                 mov_party = election_model.parties[0]
                 mov_party.x = np.round(mov_party.x + delta, decimals=2)
+                print('move party:', mov_party.x)
+        elif sim_type == 'vote_capture':
+            if ((i+1) % move_period == 0):
+                mov_party = election_model.parties[0]
+                mov_party.x = np.round(mov_party.x - delta, decimals=2)
+                print('move party:', mov_party.x)
+        elif sim_type == 'radicalization_and_emerge':
+            mov_party = election_model.parties[0]
+            mov_ppos = mov_party.x
+            party_num = len(election_model.parties)
+
+            if (mov_ppos == 0.6 and party_num < 3):
+                election_model.form_new_party(party_pos=new_party)
+
+            if ((i+1) % move_period == 0) and (mov_ppos < 0.6):
+                mov_party.x = np.round(mov_party.x + delta, decimals=2)
+                print('move party:', mov_party.x)
 
     # collecting model results
     if model_report:
@@ -65,7 +83,7 @@ def simulate_election(params, model_keys, sim_type='when_pemerge',
 
 
 def iterate_seq(combo_vparams, fixed_params, model_keys, sim_type,
-                new_party=None, delta=0.05, n_sim=10,
+                new_party=None, delta=0.05, move_period=50, n_sim=10,
                 n_iter=1000, print_interval=500, model_report=True, step_report=False):
 
     tmp_results = []
@@ -80,15 +98,15 @@ def iterate_seq(combo_vparams, fixed_params, model_keys, sim_type,
         for j in range(n_sim):
             print('simulation: {}'.format(j))
             sim_result = simulate_election(params, model_keys, sim_type,
-                                           new_party, delta, n_iter,
+                                           new_party, delta, move_period, n_iter,
                                            print_interval, model_report, step_report)
             tmp_results.append(sim_result)
 
     return tmp_results
 
 def iterate_parallel(combo_vparams, fixed_params, model_keys, pool, process_num,
-                     sim_type, new_party=None, delta=0.05, n_sim=10, n_iter=1000, print_interval=500,
-                     model_report=True, step_report=False):
+                     sim_type, new_party=None, delta=0.05, move_period=50, n_sim=10, n_iter=1000,
+                     print_interval=500, model_report=True, step_report=False):
 
     tmp_results = []
 
@@ -104,18 +122,24 @@ def iterate_parallel(combo_vparams, fixed_params, model_keys, pool, process_num,
         # parallelize different sim runs with the same params
         sim_results = list(pool.apply_async(simulate_election,
                                         args=(params, model_keys, sim_type,
-                                              new_party, delta, n_iter, print_interval,
-                                              model_report, step_report,))
+                                              new_party, delta, move_period, n_iter,
+                                              print_interval, model_report, step_report,))
                        for j in range(n_sim))
         sim_results = [r.get() for r in sim_results]
         tmp_results.extend(sim_results)
 
     return tmp_results
 
-def unpack_step_results(step_results, combo_vparams, n_sim, party_num,
-                        sim_type, delta=0.05):
+def unpack_step_results(step_results, combo_vparams, fixed_params,
+                        n_sim, new_party, sim_type, delta=0.05, move_period=50):
 
     all_step_results = []
+
+    party_num = fixed_params['party_num']
+    if (new_party is not None):
+        party_num += 1
+
+    init_p1 = fixed_params['party_loc'][0] # used in "radicalization" and "vote_capture" scenarios
 
     vprop_cols = [f'vote_prop{i}' for i in range(party_num)]
     sprop_cols = [f'seat_prop{i}' for i in range(party_num)]
@@ -135,22 +159,35 @@ def unpack_step_results(step_results, combo_vparams, n_sim, party_num,
 
             if sim_type == 'radicalization':
                 mov_ppos = []
-                nunique_pos = int(result_df.shape[0] / 50) # number of positions of the moving party
-                max_pos = np.round(-delta * (nunique_pos - 1), decimals=2) # latest position
-                unique_pos = np.linspace(0, max_pos, nunique_pos) # enumerate all positions
+                nunique_pos = int(result_df.shape[0] / move_period) # number of positions of the moving party
+                max_pos = np.round(init_p1 + (delta * (nunique_pos - 1)), decimals=2) # latest position
+                unique_pos = np.linspace(init_p1, max_pos, nunique_pos) # enumerate all positions
 
                 for pos in unique_pos:
-                    mov_ppos.extend([pos] * 50)
+                    mov_ppos.extend([pos] * move_period)
 
                 result_df['mov_ppos'] = mov_ppos
+
             elif sim_type == 'vote_capture':
                 mov_ppos = []
-                nunique_pos = int(result_df.shape[0] / 50)  # number of positions of the moving party
-                max_pos = np.round(-1 + (delta * (nunique_pos - 1)), decimals=2)  # latest position
-                unique_pos = np.linspace(-1, max_pos, nunique_pos)  # enumerate all positions
+                nunique_pos = int(result_df.shape[0] / move_period)  # number of positions of the moving party
+                max_pos = np.round(init_p1 - (delta * (nunique_pos - 1)), decimals=2)  # latest position
+                unique_pos = np.linspace(init_p1, max_pos, nunique_pos)  # enumerate all positions
 
                 for pos in unique_pos:
-                    mov_ppos.extend([pos] * 50)
+                    mov_ppos.extend([pos] * move_period)
+
+                result_df['mov_ppos'] = mov_ppos
+
+            elif sim_type == 'radicalization_and_emerge':
+                mov_ppos = []
+                nunique_pos = int(result_df.shape[0] / move_period)  # number of positions of the moving party
+                max_pos = np.round(init_p1 + (delta * (nunique_pos - 1)), decimals=2)  # latest position
+                unique_pos = np.linspace(init_p1, max_pos, nunique_pos)  # enumerate all positions
+                unique_pos = np.clip(unique_pos, a_min=0, a_max=0.6) # radicalized party stop moving at 0.6
+
+                for pos in unique_pos:
+                    mov_ppos.extend([pos] * move_period)
 
                 result_df['mov_ppos'] = mov_ppos
 
@@ -164,6 +201,7 @@ def unpack_step_results(step_results, combo_vparams, n_sim, party_num,
 
     print(all_step_results.info())
     print(all_step_results.head())
+    # print(all_step_results['mov_ppos'].unique())
 
     return all_step_results
 
@@ -174,7 +212,7 @@ if __name__ == '__main__':
     with open('election_config.yaml') as file:
         config_params = yaml.safe_load(file)
 
-    # 'when_pemerge', 'fptp_sort', 'radicalization', 'vote_capture'
+    # 'when_pemerge', 'geo_sort', 'radicalization', 'vote_capture'
     sim_type = config_params['sim_type']
 
     fixed_params = config_params['fixed_params']
@@ -183,25 +221,27 @@ if __name__ == '__main__':
     n_sim = config_params['n_sim']
     n_iter = config_params['iter_num']
     print_interval = config_params['print_interval']
-    elect_system = fixed_params['voting']
+    elect_system = fixed_params['elect_system']
+    voting = fixed_params['voting']
     pop_mag = int(fixed_params['N']/1000)
     delta = config_params['delta']
+    move_period = config_params['move_period']
 
     new_party = config_params['new_party']
     if new_party == 'moderate':
         new_party_pos = 0
     elif new_party == 'extreme':
-        new_party_pos = 0.8
-    else:
-        new_party_pos = None
+        new_party_pos = 0.75
+    else: # use "null" in yaml to specify None
+        new_party_pos = new_party
 
-    process_num = 2 #int(os.getenv('SLURM_CPUS_ON_NODE'))
+    process_num = 1 #int(os.getenv('SLURM_CPUS_ON_NODE'))
 
     model_report = config_params['model_report']
     step_report = config_params['step_report']
 
     # keys for collecting data from the model
-    model_keys = ['party_num', 'voting',
+    model_keys = ['party_num', 'elect_system', 'voting',
                   'distribution', 'js_distance']
 
     # initiate multicore-processing pool
@@ -220,27 +260,36 @@ if __name__ == '__main__':
         variable_params = {'alpha': [np.round(val, decimals=2) for val in np.linspace(0, 1, 21)],
                            'beta': [np.round(val, decimals=2) for val in np.linspace(0, 1, 21)]}
     # testing the degree of ideological sorting in FPTP that allows party to emerge
-    elif sim_type == 'fptp_sort':
-        fixed_params['beta'] = 0.5
+    elif sim_type == 'geo_sort':
+        # fixed_params['beta'] = 0.5
         del fixed_params['ideo_sort']
 
         variable_params = {'alpha': [0.1, 0.5, 0.9],
+                           'beta': [0.1, 0.5, 0.9],
                            'ideo_sort': [np.round(val, decimals=1) for val in np.linspace(0, 1, 11)]}
 
     elif (sim_type == 'radicalization') or (sim_type == 'vote_capture'):
-        fixed_params['beta'] = 1
-        variable_params = {'alpha': [0.5, 0.7, 0.9]}
+        # fixed_params['beta'] = 0.4
+        variable_params = {'alpha': [np.round(val, decimals=1) for val in np.linspace(0, 1, 11)],
+                           'beta': [np.round(val, decimals=1) for val in np.linspace(0, 1, 11)]}
+
+    elif (sim_type == 'radicalization_and_emerge'):
+        variable_params = {'alpha': [np.round(val, decimals=1) for val in np.linspace(0, 1, 11)],
+                           'beta': [np.round(val, decimals=1) for val in np.linspace(0, 1, 11)]}
+
+    elif (sim_type == 'baseline'):
+        variable_params = {'alpha': [0], 'beta': [0]}
 
     combo_vparams = [dict(zip(variable_params.keys(), a))
                      for a in itertools.product(*variable_params.values())]
 
     if process_num > 1:
         tmp_results = iterate_parallel(combo_vparams, fixed_params, model_keys, p, process_num,
-                                       sim_type, new_party_pos, delta, n_sim, n_iter, print_interval,
-                                       model_report, step_report)
+                                       sim_type, new_party_pos, delta, move_period, n_sim, n_iter,
+                                       print_interval, model_report, step_report)
     else:
         tmp_results = iterate_seq(combo_vparams, fixed_params, model_keys, sim_type, new_party_pos,
-                                  delta, n_sim, n_iter, print_interval, model_report, step_report)
+                                  delta, move_period, n_sim, n_iter, print_interval, model_report, step_report)
 
     results.extend(tmp_results)
 
@@ -252,16 +301,12 @@ if __name__ == '__main__':
 
     # save data
     mres_filename = 'elect{}k_{}_p{}_{}_{}{}.csv'.format(pop_mag, elect_system, fixed_params['party_num'],
-                                                      new_party, sim_type, config_params['batch_id'])
+                                                         new_party, sim_type, config_params['batch_id'])
     sres_filename = 'estep{}k_{}_p{}_{}_{}{}.csv'.format(pop_mag, elect_system, fixed_params['party_num'],
-                                                      new_party, sim_type, config_params['batch_id'])
+                                                         new_party, sim_type, config_params['batch_id'])
 
     mresult_file = os.path.join(result_path, mres_filename)
     sresult_file = os.path.join(result_path, sres_filename)
-
-    final_party_num = fixed_params['party_num']
-    if (new_party_pos is not None):
-        final_party_num += 1
 
     if model_report and step_report:
         unzip_res = list(zip(*results)) # split aggregate results and time-step results
@@ -274,7 +319,8 @@ if __name__ == '__main__':
         print(model_results.head())
 
         step_results = unzip_res[0]
-        all_step_results = unpack_step_results(step_results, combo_vparams, n_sim, final_party_num)
+        all_step_results = unpack_step_results(step_results, combo_vparams, fixed_params, n_sim,
+                                               new_party, sim_type, delta, move_period)
 
         model_results.to_csv(mresult_file, index=False)
         all_step_results.to_csv(sresult_file, index=False)
@@ -290,5 +336,6 @@ if __name__ == '__main__':
         model_results.to_csv(mres_filename, index=False)
 
     else:
-        all_step_results = unpack_step_results(results, combo_vparams, n_sim, final_party_num, sim_type)
+        all_step_results = unpack_step_results(results, combo_vparams, fixed_params, n_sim,
+                                               new_party, sim_type, delta, move_period)
         all_step_results.to_csv(sresult_file, index=False)

@@ -49,9 +49,11 @@ class Election:
 
         # make sure to enough candidates for the number of seats
         if rep_num > nom_rate:
-            nom_rate = rep_num + 1
+            nom_rate = rep_num
 
-        meta_residents = []
+        # meta_residents = []
+
+        # initialize residents sorted ideologically first and mix them later
         if district_num > 1:
             if opinion_dist_dict['dist'] == 'uniform':
                 gap_size = 2 / district_num  # preference space absolute length = 2
@@ -62,6 +64,12 @@ class Election:
                 # district ideological bound for uniform distribution
                 opinion_dist_list = [{'dist': 'uniform', 'low': low / 1000,'up': (low + jump) / 1000}
                                      for low in range(start, stop, jump)]
+            elif opinion_dist_dict['dist'] == 'beta':
+                # no homophily option at the moment
+                opinion_dist_list = [{'dist': 'beta',
+                                      'a': opinion_dist_dict['a'],
+                                      'b': opinion_dist_dict['b']}
+                                     for _ in range(district_num)]
             elif opinion_dist_dict['dist'] == 'gaussian':
                 gap_size = 2 / district_num  # preference space absolute length = 2
                 start = int((-1 + (gap_size / 2)) * 1000)  # scaled up by 1000 to calculate as integer
@@ -79,7 +87,7 @@ class Election:
                                     opinion_dist_list[i])
                 self.districts.append(district)
 
-            # ideological sorting
+            # ideological mixing
             if ideo_sort < 1:
                 movers = []
 

@@ -35,6 +35,10 @@ class District:
         if opinion_dist_dict['dist'] == "uniform":
             init_opis = np.random.uniform(opinion_dist_dict['low'],
                                           opinion_dist_dict['up'], size=N)
+        elif opinion_dist_dict['dist'] == "beta":
+            init_opis = np.random.beta(opinion_dist_dict['a'],
+                                       opinion_dist_dict['b'], size=N)
+            init_opis = (init_opis * 2) - 1 # [0,1] -> [-1, 1]
         elif opinion_dist_dict['dist'] == "gaussian":
             lower, upper = -1, 1
             gaussian_mu = opinion_dist_dict['mu']
@@ -153,12 +157,15 @@ class District:
 
             vote_counter = Counter(vote)
             self.prev_vote_props = np.array([vote_counter[i] / vote.shape[0] for i in range(len(parties))])
+            # print('district {}, vote prop'.format(self.d_id), self.prev_vote_props)
 
             # fill in vote count for parties with 0 vote for seat calculation
             if len(vote_counter) < len(parties):
                 for pid in range(len(parties)):
                     if pid not in vote_counter:
                         vote_counter[pid] = 0
+
+            # print(vote_counter)
 
             # Calculate seats for each party (Hamilton's method)
             # Previously d'Hondt method
@@ -174,8 +181,10 @@ class District:
                 party_rep_nums[pid] = int(tmp)
                 remainders[pid] = tmp - int(tmp)
 
+            # print('rep each party: {}, remainders: {}'.format(party_rep_nums, remainders))
+
             remain_seats = self.rep_num - sum(party_rep_nums.values())
-            top_remain_parties = np.argsort(remainders)
+            top_remain_parties = np.argsort(remainders)[::-1]
 
             # print('Allocated seat num w/ full quota: ', sum(party_rep_nums.values()))
 

@@ -265,7 +265,7 @@ if __name__ == '__main__':
         del fixed_params['ideo_sort']
 
         variable_params = {'alpha': [0.1, 0.5, 0.9],
-                           'beta': [0.1, 0.5, 0.9],
+                           'beta': [0.3, 0.5, 0.7],
                            'ideo_sort': [np.round(val, decimals=1) for val in np.linspace(0, 1, 11)]}
 
     elif (sim_type == 'radicalization') or (sim_type == 'vote_capture'):

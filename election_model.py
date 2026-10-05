@@ -13,6 +13,7 @@ class Election:
     def __init__(self, N, nom_rate = 5, rep_num = 1,
                  party_num = None, party_sd = 0.2, party_loc = 'polarized',
                  district_num = 1, elect_system='one_per_party', voting='deterministic',
+                 allocation_method = 'dhondt',
                  opinion_dist_dict = {'dist': "uniform", 'low': -1, 'up': 1},
                  ideo_sort = 0, alpha = 0.5, beta = 0.5, ps=0.05):
         """
@@ -29,6 +30,7 @@ class Election:
         district_num: number of district
         elect_system: electoral system including "one_per_party" (First-Past-The-Post) and "proportional_rep"
         voting: voting type including "deterministic" and "probabilistic"
+        allocation_method: seat allocation method for Proportional Representation
         opinion_dist_dict: distribution of opinions of the district residents
         ideo_sort: the degree of ideological geographic sorting across multiple districts
         strategic: whether residents vote strategically based on past outcome and polling results
@@ -38,6 +40,7 @@ class Election:
         """
         self.elect_system = elect_system
         self.voting = voting
+        self.allo_method = allocation_method
         self.opinion_dist_dict = opinion_dist_dict
         self.alpha = alpha
         self.beta = beta
@@ -288,7 +291,8 @@ class Election:
 
         for district in self.districts:
             district.nominate(self.parties)
-            district.vote(elect_system=self.elect_system, voting=self.voting, parties=self.parties)
+            district.vote(elect_system=self.elect_system, voting=self.voting,
+                          parties=self.parties, pr_allo_method=self.allo_method)
 
             # current elected representative pool
             self.elected_pool.extend(district.elected)

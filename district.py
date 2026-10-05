@@ -97,7 +97,7 @@ class District:
 
 
     def vote(self, elect_system="one_per_party", voting="deterministic", parties=[],
-             party_filter=False):
+             party_filter=False, pr_allo_method='dhondt'):
 
         # every resident votes
         resident_opis = np.array([resident.x for resident in self.residents])
@@ -167,29 +167,42 @@ class District:
 
             # print(vote_counter)
 
-            # Calculate seats for each party (Hamilton's method)
-            # Previously d'Hondt method
+            # Calculate seats for each party (d'Hondt method or Hamilton's method)
             party_rep_nums = {}
-            remainders = [0 for _ in range(len(vote_counter))]
-            # print(vote_counter)
 
-            total_vote = sum(vote_counter.values())
-            hare_quota = total_vote / self.rep_num
+            if pr_allo_method == 'dhondt':
+                quot = {}  # quotients
+                for pid, vote_count in vote_counter.items():
+                    party_rep_nums[pid] = 0
+                    quot[pid] = vote_count # consider only vote count for first iteration
 
-            for pid, vote_count in vote_counter.items():
-                tmp = vote_count / hare_quota
-                party_rep_nums[pid] = int(tmp)
-                remainders[pid] = tmp - int(tmp)
+                while (sum(party_rep_nums.values())) < self.rep_num:
+                    max_a = max(quot.values())
+                    next_seat = list(quot.keys())[list(quot.values()).index(max_a)]
+                    party_rep_nums[next_seat] += 1
 
-            # print('rep each party: {}, remainders: {}'.format(party_rep_nums, remainders))
+                    # Calculating quotients
+                    quot[next_seat] = vote_counter[next_seat] / (party_rep_nums[next_seat] + 1)
+            elif pr_allo_method == 'hamilton':
+                remainders = [0 for _ in range(len(vote_counter))]
+                # print(vote_counter)
 
-            remain_seats = self.rep_num - sum(party_rep_nums.values())
-            top_remain_parties = np.argsort(remainders)[::-1]
+                total_vote = sum(vote_counter.values())
+                hare_quota = total_vote / self.rep_num
 
-            # print('Allocated seat num w/ full quota: ', sum(party_rep_nums.values()))
+                # calculate the number of integer seats and remainders
+                for pid, vote_count in vote_counter.items():
+                    tmp = vote_count / hare_quota
+                    party_rep_nums[pid] = int(tmp)
+                    remainders[pid] = tmp - int(tmp)
 
-            for i in range(remain_seats):
-                party_rep_nums[top_remain_parties[i]] += 1
+                # calculate remaining seats and sort remainders
+                remain_seats = self.rep_num - sum(party_rep_nums.values())
+                top_remain_parties = np.argsort(remainders)[::-1]
+
+                # allocate the remaining seats
+                for i in range(remain_seats):
+                    party_rep_nums[top_remain_parties[i]] += 1
 
             # print('Seats allocation: {}'.format(party_rep_nums))
 
@@ -280,8 +293,9 @@ class District:
         weighted_vote_props = (self.beta * self.prev_vote_props) + ((1 - self.beta) * poll_props)
         # print('district {}, weighted vote props:'.format(self.d_id), weighted_vote_props)
 
-        # (1 / (number of seats + 1)) droop quota -> winning probability
-        crit_thresh = 1 / (self.rep_num + 1)
+        # Hare quota
+        # previously droop quota: (1 / (number of seats + 1))
+        crit_thresh = 1 / (self.rep_num)
         win_probs = np.clip((1 / crit_thresh) * weighted_vote_props, a_min=None, a_max=1)
 
         # final vote decision

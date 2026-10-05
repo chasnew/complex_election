@@ -1,9 +1,28 @@
 result_path: 'results'
+sim_type: 'radicalization'
+batch_id: 2
 n_sim: 2
-iter_num: 2500
-print_interval: 2000
-scenario: 'proportional_rep'
+delta: 0.04
+move_period: 1
+iter_num: 25
+print_interval: 500
+new_party: null
+model_report: False
+step_report: True
 fixed_params:
-  N: 10000
-  nom_rate: 0.05
-  opinion_distribution: 'uniform'
+  N: 5000
+  nom_rate: 1
+  party_num: 2
+  party_loc: [0, -0.5]
+  party_sd: 0.1
+  elect_system: 'one_per_party'
+  voting: 'deterministic'
+  rep_num: 1
+  district_num: 12
+  ps: 0.1
+  ideo_sort: 0
+  allocation_method: 'dhondt'
+  opinion_dist_dict:
+    dist: 'uniform'
+    low: -1
+    up: 1

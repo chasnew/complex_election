@@ -11,21 +11,22 @@ random.seed(1012)
 alpha_range = np.linspace(1,3,num=21)
 
 fixed_params = {'N': 5000,
-                'nom_rate': 12,
-                'rep_num': 12,
+                'nom_rate': 1,
+                'rep_num': 1,
                 'party_num': 2,
                 'party_sd': 0.1,
                 'party_loc': [-0.66, 0.66],
-                'district_num': 1,
-                'elect_system': 'proportional_rep',
+                'district_num': 12,
+                'elect_system': 'one_per_party',
                 'voting': 'deterministic',
+                'allocation_method': 'dhondt',
                 'opinion_dist_dict': {'dist': "beta", 'a': 1, 'b': 1},
                 'ideo_sort': 0,
                 'alpha': 0,
                 'beta': 0,
                 'ps': 0.1}
 
-n_sim = 25
+n_sim = 50
 n_iter = 20
 print_interval = 10
 # max_js_distance = 0.8325546111576977
